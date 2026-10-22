@@ -1,0 +1,1912 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="author" content="ヤモリ">
+<title>Social Walk</title>
+<link rel="stylesheet" href="https://cesium.com/downloads/cesiumjs/releases/1.117/Build/Cesium/Widgets/widgets.css">
+<script src="https://cesium.com/downloads/cesiumjs/releases/1.117/Build/Cesium/Cesium.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  #cesiumContainer { position: absolute; inset: 0; }
+  #cesiumContainer canvas { touch-action: none; }
+  #status { font-weight: 600; margin-bottom: 4px; }
+  #status.err { color: #ff9a9a; white-space: pre-wrap; }
+  #info { font-variant-numeric: tabular-nums; opacity: .92; font-size: 12px; line-height: 1.5; }
+  #tp { display: flex; gap: 6px; margin-top: 8px; }
+  #tp input { flex: 1; min-width: 0; font-size: 16px; padding: 6px 8px; border-radius: 6px; border: 0; }
+  #tp button { font-size: 14px; padding: 6px 10px; border-radius: 6px; border: 0; background: #3b82f6; color: #fff; }
+  #row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  #row button { flex: 1 1 45%; font-size: 14px; padding: 7px 10px; border-radius: 6px; border: 0; background: #374151; color: #fff; }
+  #tpmsg { font-size: 12px; color: #ffd27a; min-height: 1em; margin-top: 4px; }
+  /* ---- 設定（真ん中に出る） ---- */
+  #settings { position: fixed; inset: 0; z-index: 35; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.45); }
+  #settings .box { width: min(460px, calc(100vw - 20px)); max-height: calc(100vh - 20px); max-height: calc(100dvh - 20px); overflow-y: auto; box-sizing: border-box;
+                   background: rgba(15, 20, 30, .94); color: #fff; border-radius: 12px; padding: 12px 14px; font-size: 13px; line-height: 1.5; }
+  #settings .settitle { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 16px; margin-bottom: 6px; }
+  #settings .settitle button { font-size: 12px; padding: 4px 10px; border: 0; border-radius: 6px; background: #4b5563; color: #fff; }
+  #settings .sethead { margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.18); font-weight: 600; font-size: 12px; color: #9ee6b4; }
+  .setrow { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 13px; }
+  .setrow label { white-space: nowrap; font-variant-numeric: tabular-nums; min-width: 12.5em; }
+  .setrow input[type=range] { flex: 1; min-width: 0; }
+  .setrow input.num { flex: 0 0 5.2em; width: 5.2em; font-size: 14px; padding: 3px 4px; border-radius: 6px; border: 0; }
+  .sethint { font-size: 11px; color: #aab; margin-top: 2px; }
+  /* ---- ミニマップ（左下） ---- */
+  #mini { position: absolute; left: 10px; bottom: max(10px, env(safe-area-inset-bottom)); width: 150px; height: 150px; z-index: 11;
+          border-radius: 14px; border: 2px solid rgba(255,255,255,.75); box-shadow: 0 2px 10px rgba(0,0,0,.5); background: #cfd8dc; touch-action: none; }
+  @media (max-width: 720px) { #mini { bottom: calc(max(8px, env(safe-area-inset-bottom)) + 64px); } }
+  body.touch #mini { width: 110px; height: 110px; bottom: 214px; }
+  #help { font-size: 12px; line-height: 1.6; margin-top: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.18); opacity: .88; }
+  #credit { position: absolute; right: 10px; top: 54px; z-index: 10; color: #fff; font-size: 11px;
+            background: rgba(15, 20, 30, .55); border-radius: 8px; padding: 4px 8px; pointer-events: none; }
+  #stick { display: none; position: absolute; left: 24px; bottom: 84px; width: 120px; height: 120px; z-index: 11;
+           border-radius: 50%; background: rgba(255,255,255,.15); border: 2px solid rgba(255,255,255,.35); touch-action: none; }
+  #knob { position: absolute; left: 40px; top: 40px; width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,.7); pointer-events: none; }
+  body.touch #stick { display: block; }
+  body.touch #help .kbd { display: none; }
+  #help .touchhelp { display: none; }
+  body.touch #help .touchhelp { display: block; }
+  #jump { display: none; position: absolute; right: 24px; bottom: 94px; width: 84px; height: 84px; z-index: 11;
+          border-radius: 50%; background: rgba(255,255,255,.2); border: 2px solid rgba(255,255,255,.4); color: #fff;
+          font-size: 13px; align-items: center; justify-content: center; touch-action: none; user-select: none; -webkit-user-select: none; }
+  body.touch #jump { display: flex; }
+  #cross { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%;
+           background: rgba(255,255,255,.8); z-index: 9; pointer-events: none; }
+  /* ---- インベントリ・ホットバー・車のメーター ---- */
+  .hidden { display: none !important; }
+  #hotbar { position: absolute; left: 50%; bottom: max(8px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 12;
+            display: flex; gap: 3px; padding: 4px; background: rgba(0,0,0,.5); border: 2px solid #1a1a1a; border-radius: 4px;
+            user-select: none; -webkit-user-select: none; }
+  .slot { position: relative; width: min(48px, calc((100vw - 40px) / 9)); aspect-ratio: 1; box-sizing: border-box;
+          background: rgba(110,110,110,.55); border: 3px solid #8a8a8a; border-top-color: #222; border-left-color: #222; cursor: pointer; }
+  .slot.sel { border: 3px solid #fff; box-shadow: 0 0 0 2px #000, 0 0 10px rgba(255,255,255,.6); background: rgba(160,160,160,.55); }
+  .slot .ic { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+              font-size: min(26px, calc((100vw - 40px) / 9 * .55)); pointer-events: none; }
+  .slot .num { position: absolute; top: -1px; left: 2px; font-size: 10px; color: #eee; text-shadow: 1px 1px 0 #000; pointer-events: none; z-index: 1; }
+  #itemName { position: absolute; left: 50%; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 64px); transform: translateX(-50%); z-index: 12;
+              color: #fff; font-size: 14px; text-shadow: 1px 1px 2px #000; pointer-events: none; opacity: 0; transition: opacity .4s; white-space: nowrap; }
+  #inv { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.5); }
+  #inv .box { background: #c6c6c6; border: 4px solid #1a1a1a; border-radius: 6px; padding: 12px 14px; color: #222; max-width: calc(100vw - 20px); box-sizing: border-box; }
+  #inv .invtitle { font-weight: 700; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  #inv .invtitle button { font-size: 12px; padding: 3px 8px; border: 0; border-radius: 4px; background: #555; color: #fff; }
+  #inv .invhint { font-size: 11px; color: #444; margin-bottom: 8px; }
+  #inv .invsub { font-size: 12px; margin: 10px 0 4px; color: #333; }
+  #invSel { font-size: 12px; margin-top: 8px; color: #222; }
+  #invGrid, #invHot { display: grid; grid-template-columns: repeat(9, min(48px, calc((100vw - 60px) / 9))); gap: 3px; }
+  #hudBtns { position: absolute; top: max(10px, env(safe-area-inset-top)); right: 10px; z-index: 20; display: flex; gap: 6px; }
+  #hudBtns button { font-size: 16px; padding: 6px 10px; border: 0; border-radius: 8px; background: rgba(15,20,30,.7); color: #fff; }
+  body.hideui #uiBtn { opacity: .45; }
+  body.hideui #downBtn, body.hideui #hotbar, body.hideui #itemName, body.hideui #mini, body.hideui #setBtn, body.hideui #viewBtn,
+  body.hideui #invBtn, body.hideui #inv, body.hideui #settings, body.hideui #carHud { display: none !important; }
+  #useBtn { display: none; position: absolute; right: 28px; bottom: 196px; width: 64px; height: 64px; z-index: 11; border-radius: 50%;
+            background: rgba(255,255,255,.2); border: 2px solid rgba(255,255,255,.4); color: #fff; font-size: 13px;
+            align-items: center; justify-content: center; touch-action: none; user-select: none; -webkit-user-select: none; }
+  body.touch #useBtn { display: flex; }
+  #downBtn { display: none; position: absolute; right: 112px; bottom: 196px; width: 64px; height: 64px; z-index: 11; border-radius: 50%;
+             background: rgba(255,255,255,.2); border: 2px solid rgba(255,255,255,.4); color: #fff; font-size: 13px;
+             align-items: center; justify-content: center; touch-action: none; user-select: none; -webkit-user-select: none; }
+  body.touch.flying #downBtn { display: flex; }
+  #toast { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); z-index: 25; background: rgba(0,0,0,.65); color: #fff;
+           padding: 6px 14px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity .3s; pointer-events: none; }
+  #carHud { display: none; position: absolute; left: 50%; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 84px); transform: translateX(-50%); z-index: 12;
+            color: #fff; text-align: center; text-shadow: 1px 1px 3px #000; font-variant-numeric: tabular-nums; pointer-events: none; white-space: nowrap; }
+  #carHud .spd { font-size: 34px; font-weight: 700; }
+  #carHud .spd small { font-size: 14px; font-weight: 400; }
+  #carHud .sub { font-size: 14px; }
+  /* ---- 読み込み画面 ---- */
+  #loading { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center;
+             background: radial-gradient(ellipse at 50% 40%, #1d3a2f 0%, #0b1a14 70%); color: #fff; transition: opacity .6s;
+             text-align: center; padding: 20px; box-sizing: border-box; }
+  #loading.done { opacity: 0; pointer-events: none; }
+  #loading .ld-gecko { font-size: 64px; line-height: 1; animation: ldBob 1.6s ease-in-out infinite; }
+  #loading .ld-title { margin-top: 12px; font-size: 22px; font-weight: 700; letter-spacing: .06em; }
+  #loading .ld-by { margin-top: 6px; font-size: 16px; color: #b8f2c9; }
+  #loading .ld-bar { margin-top: 22px; width: min(280px, 70vw); height: 6px; background: rgba(255,255,255,.15); border-radius: 3px; overflow: hidden; }
+  #loading .ld-fill { width: 40%; height: 100%; background: #6ee7a0; border-radius: 3px; animation: ldMove 1.2s ease-in-out infinite; }
+  #ldMsg { margin-top: 12px; font-size: 13px; opacity: .85; min-height: 1.4em; white-space: pre-wrap; max-width: min(520px, 90vw); }
+  #ldMsg.err { color: #ff9a9a; opacity: 1; }
+  #ldClose { margin-top: 12px; font-size: 14px; padding: 6px 14px; border: 0; border-radius: 6px; background: #374151; color: #fff; }
+  #loading .ld-foot { position: absolute; bottom: 14px; font-size: 11px; opacity: .55; }
+  @keyframes ldBob { 0%, 100% { transform: translateY(0) rotate(-6deg); } 50% { transform: translateY(-8px) rotate(6deg); } }
+  @keyframes ldMove { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+  /* ---- 駅名の予測 ---- */
+  #tpwrap { position: relative; }
+  #sugg { position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: 40; background: #fff; color: #222; border-radius: 6px;
+          box-shadow: 0 4px 14px rgba(0,0,0,.4); overflow: hidden; max-height: 40vh; overflow-y: auto; }
+  #sugg .it { padding: 8px 10px; font-size: 14px; display: flex; justify-content: space-between; gap: 8px; cursor: pointer; border-bottom: 1px solid #eee; }
+  #sugg .it:last-child { border-bottom: 0; }
+  #sugg .it.act, #sugg .it:hover { background: #dbeafe; }
+  #sugg .it small { color: #666; white-space: nowrap; }
+  #sugg .note { padding: 8px 10px; font-size: 12px; color: #666; }
+</style>
+</head>
+<body>
+<div id="cesiumContainer"></div>
+<div id="cross"></div>
+
+<canvas id="mini" title="押すと、北が上 / 進行方向が上 を切り替え"></canvas>
+
+<div id="settings" class="hidden">
+  <div class="box">
+    <div class="settitle"><span>⚙ 設定</span><button id="setClose" type="button">閉じる (O / Esc)</button></div>
+    <div id="status">準備中…</div>
+    <div id="info"></div>
+    <div id="tpwrap">
+      <form id="tp" autocomplete="off">
+        <input id="tpInput" type="text" inputmode="text" placeholder="駅名 または 緯度, 経度, 高さm（例 下北沢駅 / 35.6464, 139.6531, 120）">
+        <button type="submit">移動</button>
+      </form>
+      <div id="sugg" class="hidden"></div>
+    </div>
+    <div id="tpmsg"></div>
+
+    <div class="sethead">読み込み・演算</div>
+    <div class="setrow"><label for="dist">読み込み範囲 <span id="distVal"></span></label><input id="dist" type="range" step="100"><input id="distN" class="num" type="number" step="100" title="m"></div>
+    <div class="sethint">この距離より遠くの地図は、取得も表示もしません（軽くなります）。右の数字欄なら、スライダーの最大(20km)を超えて入力できます。</div>
+    <div class="setrow"><label for="sse">地図の細かさ <span id="sseVal"></span></label><input id="sse" type="range" min="1" max="16" step="1"></div>
+    <div class="sethint">小さいほど細かい（1が最大）。近づいたときの粗さ・ぼやけが気になるときは小さく。</div>
+    <div class="setrow"><label for="wallW">当たり判定の演算距離（歩き） <span id="wallWVal"></span></label><input id="wallW" type="range" min="2" max="40" step="1"><input id="wallWN" class="num" type="number" min="1" max="200" step="1" title="m"></div>
+    <div class="setrow"><label for="wallC">当たり判定の演算距離（車） <span id="wallCVal"></span></label><input id="wallC" type="range" min="4" max="60" step="1"><input id="wallCN" class="num" type="number" min="1" max="200" step="1" title="m"></div>
+    <div class="sethint">進む先の壁を、どこまで先まで調べるか。長いほど先読みできますが、少し重くなります。</div>
+
+    <div class="sethead">ミニマップ</div>
+    <div class="setrow"><label for="miniZ">拡大 <span id="miniZVal"></span></label><input id="miniZ" type="range" min="14" max="18" step="1"></div>
+
+    <div class="sethead">表示・操作</div>
+    <div class="setrow"><label for="fov">視野（画角） <span id="fovVal"></span></label><input id="fov" type="range" min="40" max="110" step="1"></div>
+    <div id="row">
+      <button id="vBtn" type="button">視点</button>
+      <button id="hBtn" type="button">当たり判定</button>
+      <button id="mnBtn" type="button">ミニマップ</button>
+      <button id="mrBtn" type="button">地図の向き</button>
+      <button id="cBtn" type="button">色</button>
+      <button id="mBtn" type="button" style="flex-basis:100%">表示切替</button>
+    </div>
+
+    <div id="help">
+      <div class="kbd">クリックで視点操作 / WASD 移動 / Space ジャンプ(長押しで上昇・素早く2回でスペクテーター。車ではジャンプ) / Shift 走る・ブースト / F 飛行・スペクテーター（Space↑ C/Q↓） / E インベントリ / 1〜9・ホイール スロット選択 / 右クリック or Z アイテムを使う / R 乗る・降りる / V 一人称・三人称 / O 設定 / H 画面表示の切替 / X 当たり判定 / B 車のブレーキ / [ ] 地図の高さ / Esc 視点解除</div>
+      <div class="touchhelp">左の丸で移動 / 右の丸でジャンプ(長押しで上昇・素早く2回タップでスペクテーター、車ではジャンプ。車のブレーキは丸を下へ) / 下のスロットを選んで「使う」 / 右上の👁で視点、⚙で設定、🎒でインベントリ、UIで表示切替 / 画面右側をドラッグで視点</div>
+    </div>
+  </div>
+</div>
+
+<div id="stick"><div id="knob"></div></div>
+<div id="jump">ジャンプ</div>
+<div id="useBtn">使う</div>
+<div id="downBtn">下降</div>
+<div id="hudBtns"><button id="viewBtn" type="button" title="一人称 / 三人称">👁</button><button id="setBtn" type="button" title="設定">⚙</button><button id="invBtn" type="button">🎒</button><button id="uiBtn" type="button">UI</button></div>
+<div id="toast"></div>
+<div id="carHud"></div>
+<div id="itemName"></div>
+<div id="hotbar"></div>
+<div id="inv" class="hidden">
+  <div class="box">
+    <div class="invtitle"><span>インベントリ</span><button id="invClose" type="button">閉じる (E)</button></div>
+    <div class="invhint">アイテムをクリックすると、選択中のスロットに入ります。</div>
+    <div id="invGrid"></div>
+    <div class="invsub">ホットバー（クリックでスロット選択）</div>
+    <div id="invHot"></div>
+    <div id="invSel"></div>
+  </div>
+</div>
+
+<div id="credit">建物データ: 国土交通省 Project PLATEAU（CC BY 4.0）</div>
+
+<div id="loading">
+  <div class="ld-gecko">🦎</div>
+  <div class="ld-title">Social Walk</div>
+  <div class="ld-by">制作：ヤモリ</div>
+  <div class="ld-bar"><div class="ld-fill"></div></div>
+  <div id="ldMsg">準備中…</div>
+  <button id="ldClose" class="hidden" type="button">閉じる</button>
+  <div class="ld-foot">Made by ヤモリ</div>
+</div>
+
+<script>
+// 地図ライブラリが読み込めなかったときは、読み込み画面に理由を出して止める
+if (typeof Cesium === "undefined") {
+  const m = document.getElementById("ldMsg");
+  m.textContent = "地図ライブラリ(Cesium)を読み込めませんでした。ネット接続を確認して、ページを再読み込みしてください。";
+  m.className = "err";
+  document.getElementById("ldClose").classList.remove("hidden");
+  document.getElementById("ldClose").onclick = () => { document.getElementById("loading").style.display = "none"; };
+  throw new Error("Cesium not loaded");
+}
+console.log("Social Walk — 制作: ヤモリ");
+// ============================================================
+// 設定（ここだけ書き換えればOK）
+// ============================================================
+const CONFIG = {
+  // Cesium ion のアクセストークンをここに貼る（公開前提のトークン。ionの管理画面で許可URLを制限しておく）
+  ION_TOKEN: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJub25jZSI6IkNhTUZVOG1QaDFYRFl5WmIiLCJqdGkiOiI3MzRkYjdkMy02NjAyLTRlZTEtOTAxMS1mNzZiMmRiYmExZWQiLCJpZCI6NTMwNjExLCJpc3MiOiJodHRwczovL2FwaS5jZXNpdW0uY29tIiwiYXVkIjoidW5kZWZpbmVkX2RlZmF1bHQiLCJpYXQiOjE3OTI0NTMwMzV9.x9ePLbxL55zWTaaSfxX_6UKuJCSuL0dp_kwZNCTXb54",
+
+  WARD_CODE: "13112",            // 世田谷区の市区町村コード
+  MANUAL_TILESET_URL: "",        // 自動取得に失敗したときだけ、PLATEAUの建物 tileset.json のURLをここに入れる
+
+  START: { lat: 35.6464, lon: 139.6531, heading: 0 }, // 世田谷区役所あたり
+  DRAW_DISTANCE: 1500,          // 読み込み範囲(m)の初期値。カメラからこの距離より遠いタイルは、取得も表示もしない（Googleなどへの要求自体が減って軽くなる）。設定画面のスライダーや ?dist=3000 でも変えられる
+  DRAW_DISTANCE_MIN: 200,        // スライダーの最小(m)
+  DRAW_DISTANCE_MAX: 20000,      // スライダーの最大(m)
+  DRAW_DISTANCE_HARD_MAX: 10000000, // 数字を直接入力したときの上限(m)。スライダーの最大を超えて入力できる
+  MAX_FALL_SPEED: 40,            // 落下の最高速度(m/秒)。高所から落ちても地面や屋根を突き抜けないようにする
+  TILE_SSE: 2,                   // タイルの細かさ。小さいほど細かい（1が最大＝一番細かいが重い）。設定画面でも変えられる。遠くを意図的に粗くすることはしない
+  CACHE_BYTES: 512 * 1024 * 1024, // タイルを覚えておくメモリ量（一度読み込んだ地図が消えてぼやけ直すのを防ぐ）
+  PROBE_MS: 70,                  // 当たり判定を調べる間隔(ミリ秒)
+  WALL_RANGE: 8,                 // 歩いているときに壁を探す距離(m)の初期値。設定画面でも変えられる
+  THIRD_DIST: 4.5,               // 三人称視点で、体からカメラまでの距離(m)
+  CAR_JUMP_SPEED: 9,             // 車のジャンプの初速(m/秒)。高さは約 CAR_JUMP_SPEED² ÷ (2×GRAVITY)
+  GROUND_FOLLOW: 5,              // 歩くときに地面の凸凹へ追従する速さ。小さいほど凸凹をならして平らに歩ける（大きいと地図の凸凹をそのまま拾う）
+  EYE_HEIGHT: 1.7,               // 目線の高さ(m)
+  WALK_SPEED: 5,                 // 歩く速さ(m/秒)
+  RUN_SPEED: 14,                 // 走る速さ(m/秒)
+  FLY_SPEED: 60,                 // 飛行モードの速さ(m/秒)
+  GRAVITY: 24,                   // 重力(m/秒²)。大きいほど早く落ちる
+  JUMP_SPEED: 8,                 // ジャンプの初速(m/秒)。高さは約 JUMP_SPEED² ÷ (2×GRAVITY) で、いまは約1.3m
+  ASCEND_SPEED: 8,               // 長押し中に上がる速さ(m/秒)
+  HOLD_MS: 250,                  // これ以上押し続けると「ジャンプ」から「上昇」に切り替わる(ミリ秒)
+  PLAYER_RADIUS: 0.4,            // 体の太さ(m)。壁にこれより近づけない
+  MAX_STEP: 0.6,                 // 乗り越えられる段差の高さ(m)
+  WALL_PROBE_H: 0.9,             // 壁を調べる高さ（足元から, m）
+  BUILDING_HEIGHT_OFFSET: 0,     // 建物と地面がずれて見えるとき、建物を上下に動かす量(m)。ゲーム中も [ ] キーで調整できる
+  DOUBLE_TAP_MS: 300,            // ジャンプをこの時間(ミリ秒)以内に2回押すと、スペクテーターに切り替わる
+  SPECTATOR_SPEED: 40,           // スペクテーターの速さ(m/秒)。ホイールで増減できる
+  CAR_RADIUS: 2.4,               // 車の当たり判定の大きさ(m)。歩行の PLAYER_RADIUS と同じ計算で、壁にこれより近づけない
+  CAR_WALL_RANGE: 14,            // 車が壁を探す距離(m)の初期値。速いので歩行(8m)より遠くまで調べる。設定画面でも変えられる
+  CAR_FOLLOW: 12,                // 車が地面の凸凹に追従する速さ（歩行の GROUND_FOLLOW と同じ意味）
+  RACE_LOOP: false,              // false: 1本目=スタート、最後の旗=ゴール。true: 周回（最後の旗のあと、1本目に戻るとゴール）
+  RACE_RADIUS: 14,               // 旗を通過したとみなす距離(m)
+};
+
+const DATACATALOG_GRAPHQL ="https://api.plateauview.mlit.go.jp/datacatalog/graphql";
+const DATACATALOG_REST = "https://api.plateauview.mlit.go.jp/datacatalog/plateau-datasets";
+
+// <pure>
+// ---- 画面に依存しない関数（テストしやすいようにまとめてある）----
+function normalizeInput(s) {
+  return String(s)
+    .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/[．。]/g, ".")
+    .replace(/[－−]/g, "-")
+    .replace(/[，、]/g, ",");
+}
+
+// "35.6464, 139.6531" / "35.6464 139.6531" / 全角数字 / Googleマップからコピーした座標 に対応
+function parseLatLon(text) {
+  const nums = normalizeInput(text).match(/-?\d+(?:\.\d+)?/g);
+  if (!nums || nums.length < 2) return null;
+  let lat = parseFloat(nums[0]);
+  let lon = parseFloat(nums[1]);
+  if (Math.abs(lat) > 90 && Math.abs(lon) <= 90) { const t = lat; lat = lon; lon = t; } // 経度,緯度の順で入れた場合
+  if (!(Math.abs(lat) <= 90 && Math.abs(lon) <= 180)) return null;
+  return { lat, lon };
+}
+
+// "35.6464, 139.6531, 120" のように3つ目の数字を高さ(m)として読む。なければ alt: null
+function parseLatLonAlt(text) {
+  const p = parseLatLon(text);
+  if (!p) return null;
+  const nums = normalizeInput(text).match(/-?\d+(?:\.\d+)?/g);
+  const alt = nums.length >= 3 ? parseFloat(nums[2]) : NaN;
+  return { lat: p.lat, lon: p.lon, alt: Number.isFinite(alt) ? alt : null };
+}
+
+// 北(m)・東(m)の移動量を、緯度経度(度)の変化量に直す
+function metersToDegrees(latDeg, dNorth, dEast) {
+  const R = 6371000;
+  const rad = Math.PI / 180;
+  return {
+    dLat: (dNorth / R) / rad,
+    dLon: (dEast / (R * Math.cos(latDeg * rad))) / rad,
+  };
+}
+
+// 建物データ候補の中から、好みのLODを選ぶ。preferLod=2: LOD2テクスチャ付き > LOD2テクスチャなし > LOD1
+function pickBuildingItem(items, preferLod) {
+  const score = (it) => {
+    const t = (it.name || "") + " " + (it.id || "");
+    const lod2 = /lod\s*2/i.test(t);
+    const lod1 = /lod\s*1/i.test(t);
+    const noTex = /テクスチャなし|no[_-]?texture|notexture/i.test(t);
+    if (preferLod === 1) {
+      if (lod1) return 4;
+      if (lod2 && noTex) return 3;
+      if (lod2) return 2;
+      return 1;
+    }
+    if (lod2 && !noTex) return 4;
+    if (lod2) return 3;
+    if (lod1) return 2;
+    return 1;
+  };
+  let best = null, bestScore = -1;
+  for (const it of items) {
+    const s = score(it);
+    if (s > bestScore) { best = it; bestScore = s; }
+  }
+  return best;
+}
+// 壁に向かう動きを止める。walls は {n, e, dist, t}（n,e=壁へ向かう向きの単位ベクトル, dist=壁までの距離m, t=調べた時刻）
+function clipMove(mvN, mvE, walls, now, radius, maxAge) {
+  for (const w of walls) {
+    if (now - w.t > maxAge) continue;
+    const toward = mvN * w.n + mvE * w.e;
+    if (toward <= 0) continue;
+    const room = Math.max(0, w.dist - radius);
+    const allowed = Math.min(toward, room);
+    const excess = toward - allowed;
+    mvN -= excess * w.n;
+    mvE -= excess * w.e;
+    w.dist -= allowed;
+  }
+  return { n: mvN, e: mvE };
+}
+
+// 重力とジャンプ。p = { feetH, vy, onGround }。ground が数値でないときは今の高さのまま
+function stepPhysics(p, ground, wantJump, dt, cfg) {
+  if (typeof ground !== "number") ground = p.feetH;
+  if (wantJump && p.onGround) { p.vy = cfg.jump; p.onGround = false; }
+  if (p.onGround) {
+    if (p.feetH - ground > cfg.dropLimit) { p.onGround = false; p.vy = 0; }       // 段差から落ちる
+    else p.feetH += (ground - p.feetH) * Math.min(1, dt * (cfg.follow || 15));                      // 地面に沿って上下
+  }
+  if (!p.onGround) {
+    p.vy -= cfg.gravity * dt;
+    if (cfg.maxFall && p.vy < -cfg.maxFall) p.vy = -cfg.maxFall;   // 落下の最高速度
+    p.feetH += p.vy * dt;
+    if (p.feetH <= ground && p.vy <= 0) { p.feetH = ground; p.vy = 0; p.onGround = true; }
+  }
+  return p;
+}
+// 緯度経度 → 地図タイル(Webメルカトル)の全世界ピクセル座標。zoom z のとき、世界の幅は 256×2^z ピクセル
+function lonLatToPx(lon, lat, z) {
+  const N = 256 * Math.pow(2, z);
+  const s = Math.sin(Math.max(-85.0511, Math.min(85.0511, lat)) * Math.PI / 180);
+  return { x: (lon + 180) / 360 * N, y: (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * N };
+}
+// </pure>
+
+// ============================================================
+// 画面部品
+// ============================================================
+const $ = (id) => document.getElementById(id);
+function setStatus(msg, isErr) {
+  const el = $("status");
+  el.textContent = msg;
+  el.className = isErr ? "err" : "";
+  const ld = $("ldMsg");   // 読み込み画面にも同じ文を出す
+  ld.textContent = msg;
+  ld.className = isErr ? "err" : "";
+  if (isErr) $("ldClose").classList.remove("hidden");
+}
+function hideLoading() {
+  const el = $("loading");
+  el.classList.add("done");
+  setTimeout(() => { el.style.display = "none"; }, 700);
+}
+$("ldClose").addEventListener("click", hideLoading);
+function isTyping() {
+  const a = document.activeElement;
+  return !!a && (a.tagName === "INPUT" || a.tagName === "SELECT" || a.tagName === "TEXTAREA");
+}
+if (navigator.maxTouchPoints > 0) document.body.classList.add("touch");
+
+// ============================================================
+// ゲーム状態
+// ============================================================
+// ?map=google で、写真ベースの3D地図（Cesium ion 経由の Google Photorealistic 3D Tiles）に切り替える
+// 何も指定しなければ写真の3D地図。?map=plateau でPLATEAUの建物に切り替わる
+const MAP_MODE = new URLSearchParams(location.search).get("map") === "plateau" ? "plateau" : "google";
+
+// 設定画面の値は、この端末のブラウザに覚えておく（使えなくても動く）
+const PREF_KEY = "sw3d_set";
+const prefs = (() => { try { return JSON.parse(localStorage.getItem(PREF_KEY) || "{}") || {}; } catch (e) { return {}; } })();
+const numPref = (v, lo, hi, def) => { v = Number(v); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : def; };
+const mini = { on: prefs.miniOn !== false, rot: !!prefs.miniRot, z: Math.round(numPref(prefs.miniZ, 14, 18, 16)),
+               cv: null, ctx: null, css: 150, dpr: 1, last: 0, err: false, tiles: new Map() };
+
+const state = {
+  ready: false,
+  lat: CONFIG.START.lat,
+  lon: CONFIG.START.lon,
+  heading: Cesium.Math.toRadians(CONFIG.START.heading),
+  pitch: 0,
+  groundH: 0,        // 足元の地面の高さ（楕円体高, m）
+  feetH: 0,          // 足の高さ
+  vy: 0,             // 上下の速さ(m/秒)
+  onGround: true,
+  collide: true,     // 当たり判定
+  targetGround: undefined,
+  flyH: 0,           // 飛行モードの高さ
+  fly: false,
+  buildingOffset: CONFIG.BUILDING_HEIGHT_OFFSET,
+  tilesetLabel: "（未読み込み）",
+  sse: numPref(prefs.sse, 1, 16, CONFIG.TILE_SSE),                  // 地図の細かさ（誤差px）
+  wallW: numPref(prefs.wallW, 1, 200, CONFIG.WALL_RANGE),            // 当たり判定の演算距離（歩き）
+  wallC: numPref(prefs.wallC, 1, 200, CONFIG.CAR_WALL_RANGE),
+  fov: numPref(prefs.fov, 40, 110, 70),                              // 視野（画角, 度）        // 当たり判定の演算距離（車）
+  third: false,                                                     // 三人称視点（歩いているとき）
+  thirdDist: CONFIG.THIRD_DIST,
+  colorMode: "height",   // "height"=高さ別に色を付ける / "off"=データそのまま
+  textured: false,
+  propIds: [],
+  holdStart: null,   // 上昇ボタン/Spaceを押し始めた時刻（押していなければ null）
+  spectator: false,  // スペクテーター（ジャンプ2回で切り替え）
+  specPrevFly: false, // スペクテーターに入る前に飛行モードだったか
+  specMul: 1,        // スペクテーターの速さの倍率（ホイールで変える）
+  // ?dist=3000 で指定（m）。指定がなければ、前回の設定 → CONFIG.DRAW_DISTANCE の順
+  drawDistance: (() => {
+    const v = parseFloat(new URLSearchParams(location.search).get("dist"));
+    const d = Number.isFinite(v) ? v : (Number.isFinite(Number(prefs.dist)) && prefs.dist ? Number(prefs.dist) : CONFIG.DRAW_DISTANCE);
+    return Math.max(CONFIG.DRAW_DISTANCE_MIN, Math.min(CONFIG.DRAW_DISTANCE_HARD_MAX, d));
+  })(),
+};
+
+let viewer = null;
+let terrainProvider = null;
+let tileset = null;
+
+// ============================================================
+// 建物データ（PLATEAU）のURLを公式カタログから探す
+// ============================================================
+async function fetchItemsGraphQL(code) {
+  const query = `query { area(code: "${code}") { datasets { id name items { id name url } } } }`;
+  const r = await fetch(DATACATALOG_GRAPHQL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query }),
+  });
+  if (!r.ok) throw new Error("GraphQL HTTP " + r.status);
+  const j = await r.json();
+  const datasets = (j.data && j.data.area && j.data.area.datasets) || [];
+  return datasets
+    .filter(d => /bldg/i.test(d.id || "") || /建築物/.test(d.name || ""))
+    .flatMap(d => d.items || [])
+    .filter(i => i.url && /tileset\.json/.test(i.url));
+}
+
+async function fetchItemsREST(code) {
+  const r = await fetch(DATACATALOG_REST);
+  if (!r.ok) throw new Error("REST HTTP " + r.status);
+  const j = await r.json();
+  return (j.datasets || [])
+    .filter(d => d.type_en === "bldg" && d.format === "3D Tiles" && (d.ward_code === code || d.city_code === code))
+    .map(d => ({
+      id: d.id,
+      name: "LOD" + d.lod + (d.texture === false ? "（テクスチャなし）" : ""),
+      url: d.url,
+    }));
+}
+
+async function resolveBuildingTilesetUrl() {
+  if (CONFIG.MANUAL_TILESET_URL) return { url: CONFIG.MANUAL_TILESET_URL, label: "手動指定のURL", textured: false };
+
+  // ?lod=1 / ?lod=2 で指定。指定がなければ、タッチ端末は軽いLOD1、それ以外はLOD2を優先
+  const lodParam = new URLSearchParams(location.search).get("lod");
+  const preferLod = lodParam === "2" ? 2 : lodParam === "1" ? 1 : (navigator.maxTouchPoints > 0 ? 1 : 2);
+
+  let items = [];
+  const errors = [];
+  // ?ward=13113 のように指定すると、別の区のデータを試せる（写真付きLOD2がある区を探すときに使う）
+  const ward = new URLSearchParams(location.search).get("ward") || CONFIG.WARD_CODE;
+  try { items = await fetchItemsGraphQL(ward); } catch (e) { errors.push("GraphQL: " + e.message); }
+  if (!items.length) {
+    try { items = await fetchItemsREST(ward); } catch (e) { errors.push("REST: " + e.message); }
+  }
+  if (!items.length) {
+    throw new Error("PLATEAUの建物データが見つかりませんでした。\n" + errors.join("\n") +
+      "\nCONFIG.MANUAL_TILESET_URL に tileset.json のURLを入れてください。");
+  }
+  const best = pickBuildingItem(items, preferLod);
+  const t = (best.name || "") + " " + (best.id || "");
+  const textured = /lod\s*2/i.test(t) && !/テクスチャなし|no[_-]?texture|notexture/i.test(t);
+  return { url: best.url, label: best.name || best.id, textured };
+}
+
+// ============================================================
+// 建物の高さ補正
+// ============================================================
+function applyBuildingOffset() {
+  if (!tileset) return;
+  if (!state.buildingOffset) { tileset.modelMatrix = Cesium.Matrix4.clone(Cesium.Matrix4.IDENTITY); return; }
+  // 「上」の向きは、いま立っている場所で決める（写真の3D地図は範囲が地球全体で、データの中心を使うと計算できない）
+  const p = Cesium.Cartesian3.fromDegrees(state.lon, state.lat, 0);
+  const up = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(p, new Cesium.Cartesian3());
+  if (!up) return;
+  const t = Cesium.Cartesian3.multiplyByScalar(up, state.buildingOffset, new Cesium.Cartesian3());
+  tileset.modelMatrix = Cesium.Matrix4.fromTranslation(t);
+}
+
+// ============================================================
+// 読み込み範囲: カメラの「見える奥行き(far)」をこの距離にする。
+// 3Dタイルは視界の外のものを読み込まないので、これより遠い地図は Google などへ要求自体が飛ばなくなる
+// 画質は常に最高（解像度・ギザギザ軽減・メモリは固定）。遠くを粗くする処理はしない
+// ============================================================
+function savePrefs() {
+  try {
+    localStorage.setItem(PREF_KEY, JSON.stringify({ dist: state.drawDistance, sse: state.sse, wallW: state.wallW, wallC: state.wallC, fov: state.fov,
+                                                    miniZ: mini.z, miniOn: mini.on, miniRot: mini.rot }));
+  } catch (e) { /* 保存できなくても動く */ }
+}
+const fmtDist = (m) => (m >= 1000 ? (m / 1000).toFixed(1) + " km" : m + " m");
+function applyDrawDistance(m) {
+  m = Math.max(CONFIG.DRAW_DISTANCE_MIN, Math.min(CONFIG.DRAW_DISTANCE_HARD_MAX, Number(m) || CONFIG.DRAW_DISTANCE));
+  state.drawDistance = m;
+  if (viewer) viewer.camera.frustum.far = m;
+  $("dist").value = m; $("distN").value = m;
+  $("distVal").textContent = fmtDist(m);
+}
+function applyTileSse(v) {
+  v = Math.max(1, Math.min(16, Math.round(Number(v)) || CONFIG.TILE_SSE));
+  state.sse = v;
+  if (tileset) tileset.maximumScreenSpaceError = v;
+  $("sse").value = v;
+  $("sseVal").textContent = v + (v === 1 ? "（最大）" : "");
+}
+function applyWallRange() {
+  $("wallW").value = state.wallW; $("wallWN").value = state.wallW; $("wallWVal").textContent = state.wallW + " m";
+  $("wallC").value = state.wallC; $("wallCN").value = state.wallC; $("wallCVal").textContent = state.wallC + " m";
+}
+function applyFov(v) {
+  v = Math.round(numPref(v, 40, 110, 70));
+  state.fov = v;
+  if (viewer) viewer.camera.frustum.fov = Cesium.Math.toRadians(v);
+  $("fov").value = v; $("fovVal").textContent = v + "°";
+}
+// スライダーにフォーカスが残るとキー操作(WASD等)が効かなくなるので、操作後に外す
+function bindSlider(id, fn) {
+  const el = $(id);
+  el.addEventListener("input", (e) => { fn(e.target.value); savePrefs(); });
+  el.addEventListener("change", (e) => e.target.blur());
+  el.addEventListener("pointerup", (e) => e.target.blur());
+}
+// 数字を直接入力しても変えられる（入力して Enter か、枠の外を押すと反映）
+function bindNumber(id, fn) {
+  const el = $(id);
+  el.addEventListener("change", (e) => { fn(e.target.value); savePrefs(); });
+  el.addEventListener("keydown", (e) => { if (e.key === "Enter") e.target.blur(); });
+}
+$("dist").min = CONFIG.DRAW_DISTANCE_MIN;
+$("dist").max = CONFIG.DRAW_DISTANCE_MAX;
+bindSlider("dist", applyDrawDistance);
+bindSlider("sse", applyTileSse);
+const setWallW = (v) => { state.wallW = numPref(v, 1, 200, CONFIG.WALL_RANGE); applyWallRange(); };
+const setWallC = (v) => { state.wallC = numPref(v, 1, 200, CONFIG.CAR_WALL_RANGE); applyWallRange(); };
+bindSlider("wallW", setWallW); bindSlider("wallC", setWallC); bindSlider("fov", applyFov);
+bindNumber("distN", applyDrawDistance); bindNumber("wallWN", setWallW); bindNumber("wallCN", setWallC);
+applyFov(state.fov);
+applyDrawDistance(state.drawDistance);
+applyTileSse(state.sse);
+applyWallRange();
+
+// ============================================================
+// 建物の色（テクスチャなしの建物が真っ白になるのを防ぐ）
+// ============================================================
+let heightProp = null;   // null=判定中 / false=高さの属性が見つからない / 文字列=属性名
+let detectTries = 0;
+
+function makeStyle() {
+  if (!heightProp) return new Cesium.Cesium3DTileStyle({ color: "color('#bfb5a5')" });
+  const v = "Number(${feature['" + heightProp + "']})";
+  return new Cesium.Cesium3DTileStyle({
+    color: {
+      conditions: [
+        [v + " >= 100", "color('#5f7391')"],
+        [v + " >= 45", "color('#7b8fab')"],
+        [v + " >= 20", "color('#9fb0c4')"],
+        [v + " >= 9", "color('#c4b8a6')"],
+        ["true", "color('#c9b79c')"],
+      ],
+    },
+  });
+}
+
+function applyColorMode() {
+  $("cBtn").textContent = "色: " + (state.colorMode === "off" ? "なし" : "高さ");
+  if (!tileset) return;
+  tileset.style = state.colorMode === "off" ? undefined : makeStyle();
+}
+
+// 読み込めた建物から、高さの属性名を探す（データによって名前が違うため）
+function detectHeightProp(tile) {
+  if (heightProp !== null) return;
+  try {
+    const c = tile.content;
+    const list = c.innerContents && c.innerContents.length ? c.innerContents : [c];
+    for (const cc of list) {
+      if (!(cc.featuresLength > 0)) continue;
+      const ids = cc.getFeature(0).getPropertyIds([]);
+      if (!ids.length) { if (++detectTries > 40) { heightProp = false; applyColorMode(); } return; }
+      state.propIds = ids;
+      heightProp = ids.find(id => /measuredheight|計測高さ/i.test(id)) || ids.find(id => /height|高さ/i.test(id)) || false;
+      applyColorMode();
+      return;
+    }
+  } catch (e) { /* 次のタイルでもう一度試す */ }
+}
+
+$("cBtn").addEventListener("click", (e) => {
+  state.colorMode = state.colorMode === "off" ? "height" : "off";
+  applyColorMode();
+  e.currentTarget.blur();
+});
+$("mBtn").textContent = MAP_MODE === "google" ? "表示: 写真の3D地図（押すとPLATEAUに切替）" : "表示: PLATEAU（押すと写真の3D地図に切替）";
+$("mBtn").addEventListener("click", () => {
+  const u = new URL(location.href);
+  if (MAP_MODE === "google") u.searchParams.set("map", "plateau"); else u.searchParams.delete("map");
+  location.href = u.toString();
+});
+if (MAP_MODE === "google") {
+  $("cBtn").style.display = "none";
+  $("credit").textContent = "3D地図: Google（Cesium ion経由）";
+}
+
+// 写真の3D地図モードでは地球の地面を隠すので、足元の高さは地形データから時々取り直す
+let groundBusy = false, lastGroundReq = 0;
+function requestGround(now) {
+  if (groundBusy || now - lastGroundReq < (car.driving ? 120 : 400) || !terrainProvider) return;
+  groundBusy = true;
+  lastGroundReq = now;
+  Cesium.sampleTerrainMostDetailed(terrainProvider, [Cesium.Cartographic.fromDegrees(state.lon, state.lat)])
+    .then(([r]) => { if (r && typeof r.height === "number") state.targetGround = r.height; })
+    .catch(() => {})
+    .finally(() => { groundBusy = false; });
+}
+
+// ============================================================
+// 当たり判定（3D地図の面に向けて光線を飛ばして、足元の高さと壁を調べる）
+// ============================================================
+const probe = { last: 0, ground: null, walls: [], error: null, intentN: 0, intentE: 0, back: null };
+
+function updateHitBtn() {
+  $("hBtn").textContent = probe.error ? "当たり判定: 使えません" : "当たり判定: " + (state.collide ? "ON" : "OFF");
+}
+function toggleCollision() {
+  if (probe.error) { probe.error = null; state.collide = true; }   // エラー後にもう一度試す
+  else state.collide = !state.collide;
+  probe.ground = null; probe.walls = [];
+  updateHitBtn();
+}
+$("hBtn").addEventListener("click", (e) => { toggleCollision(); e.currentTarget.blur(); });
+
+function enuVec(frame, e, n, u) {
+  return Cesium.Matrix4.multiplyByPointAsVector(frame, new Cesium.Cartesian3(e, n, u), new Cesium.Cartesian3());
+}
+function castRay(scene, origin, dir) {
+  const ex = flags.map(f => f.ent);        // 旗の柱は当たり判定に入れない
+  if (car.prim) ex.push(car.prim);         // 自分の車も入れない（屋根に当たって足元の高さを誤り、車が浮き続けるのを防ぐ）
+  if (avatar.prim) ex.push(avatar.prim);   // 三人称の自分の体も入れない
+  const hit = scene.pickFromRay(new Cesium.Ray(origin, dir), ex.length ? ex : undefined);
+  return hit && hit.position ? hit.position : null;
+}
+const heightOf = (p) => Cesium.Cartographic.fromCartesian(p).height;
+
+// 描画が終わったあとに、一定間隔で実行する（毎フレーム調べると重いため）
+// 歩いているときも運転中も同じ方法で調べる（足元の面・壁・段差）。違うのは調べる位置と、壁を探す距離・大きさだけ
+function runProbes() {
+  if (!state.ready || !state.collide || state.fly || probe.error) return;
+  const now = performance.now();
+  const drv = car.driving;
+  // 立ち止まって地面にいるときは、調べる回数を減らして軽くする
+  const still = !probe.intentN && !probe.intentE && (drv ? car.onGround : state.onGround);
+  const baseMs = CONFIG.PROBE_MS;
+  if (now - probe.last < (still ? (drv ? 150 : 400) : (drv ? Math.min(baseMs, 100) : baseMs))) return;
+  probe.last = now;
+  // 調べている間だけ、自分の車（運転中）と三人称の体を隠す（描画は挟まないので、画面には影響しない）
+  const hide = [];
+  if (drv && car.prim && car.prim.show) hide.push(car.prim);
+  if (avatar.prim && avatar.prim.show) hide.push(avatar.prim);
+  hide.forEach(p => { p.show = false; });
+  try {
+    const scene = viewer.scene;
+    if (!scene.pickPositionSupported) throw new Error("この端末は当たり判定に必要な機能に対応していません");
+    const aLat = drv ? car.lat : state.lat, aLon = drv ? car.lon : state.lon;
+    const feet = drv ? car.h : state.feetH;
+    const range = drv ? state.wallC : state.wallW;            // 壁を探す距離（設定画面の「当たり判定の演算距離」）
+    const reach = drv ? CONFIG.CAR_RADIUS + 0.8 : 0.8;        // 段差を調べる、少し先の位置までの距離
+    const frame = Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(aLon, aLat, feet));
+    const down = enuVec(frame, 0, 0, -1);
+
+    // 足元: 頭の高さから真下に光線を飛ばして、立てる面を探す（頭より上の屋根は無視される）
+    const headPos = Cesium.Cartesian3.fromDegrees(aLon, aLat, feet + 1.6);
+    const gp = castRay(scene, headPos, down);
+    probe.ground = gp ? heightOf(gp) : null;
+
+    // 壁: 進もうとしている向きを、北南・東西の2方向に分けて調べる（壁に沿って滑れるように）
+    const walls = [];
+    const wallOrigin = Cesium.Cartesian3.fromDegrees(aLon, aLat, feet + CONFIG.WALL_PROBE_H);
+    const axes = [];
+    if (Math.abs(probe.intentN) > 1e-6) axes.push([0, Math.sign(probe.intentN)]);   // [東西, 南北]
+    if (Math.abs(probe.intentE) > 1e-6) axes.push([Math.sign(probe.intentE), 0]);
+    for (const [de, dn] of axes) {
+      const wp = castRay(scene, wallOrigin, enuVec(frame, de, dn, 0));
+      if (!wp) continue;
+      const dist = Cesium.Cartesian3.distance(wallOrigin, wp);
+      if (dist < range) walls.push({ n: dn, e: de, dist, t: now });
+    }
+    // 段差: 少し先の地面が高すぎるときは、壁と同じように止める
+    const m = Math.hypot(probe.intentN, probe.intentE);
+    if (m > 1e-6) {
+      const dn = probe.intentN / m, de = probe.intentE / m;
+      const a = metersToDegrees(aLat, dn * reach, de * reach);
+      const aheadHead = Cesium.Cartesian3.fromDegrees(aLon + a.dLon, aLat + a.dLat, feet + 1.6);
+      const ap = castRay(scene, aheadHead, down);
+      if (ap && heightOf(ap) - feet > CONFIG.MAX_STEP) walls.push({ n: dn, e: de, dist: reach, t: now });
+    }
+    probe.walls = walls;
+
+    // 三人称（歩き）: 体の後ろに壁があれば、カメラをその手前に寄せる
+    if (!drv && state.third) {
+      const cp = Math.cos(state.pitch);
+      const eye = Cesium.Cartesian3.fromDegrees(aLon, aLat, feet + CONFIG.EYE_HEIGHT);
+      const bp = castRay(scene, eye, enuVec(frame, -Math.sin(state.heading) * cp, -Math.cos(state.heading) * cp, -Math.sin(state.pitch)));
+      probe.back = bp ? Cesium.Cartesian3.distance(eye, bp) : 99;
+    } else probe.back = null;
+  } catch (err) {
+    probe.error = err && err.message ? err.message : String(err);
+    state.collide = false;
+    probe.ground = null; probe.walls = [];
+    updateHitBtn();
+  } finally {
+    hide.forEach(p => { p.show = true; });
+  }
+}
+updateHitBtn();
+
+applyColorMode();
+
+// ============================================================
+// テレポート
+// alt を渡すと、その地点の地面からの目線の高さ(m)に飛ぶ（2mより高ければ飛行モードで留まる）
+// ============================================================
+async function teleport(lat, lon, headingDeg, alt) {
+  const carto = Cesium.Cartographic.fromDegrees(lon, lat);
+  let h = 0;
+  try {
+    const [res] = await Cesium.sampleTerrainMostDetailed(terrainProvider, [carto]);
+    if (res && typeof res.height === "number") h = res.height;
+  } catch (e) { /* 取れなければ0のまま。あとで自動で地面に合う */ }
+  state.lat = lat;
+  state.lon = lon;
+  state.groundH = h;
+  state.targetGround = h;
+  const hasAlt = typeof alt === "number" && Number.isFinite(alt);
+  // 高さ指定あり: 地面からの目線の高さ alt(m) の位置に出て、そこから普通に落ちて着地する（飛行モードにはしない）
+  // 高さ指定なし: 少し上から落ちて、着いた場所の地面に合わせる
+  state.feetH = h + (hasAlt ? Math.max(alt - CONFIG.EYE_HEIGHT, 1) : 1);
+  state.vy = 0;
+  state.onGround = false;
+  state.holdStart = null;
+  if (car.driving) { car.lat = lat; car.lon = lon; car.h = h + 2; car.vy = 0; car.onGround = false; car.speed = 0; }   // 運転中なら車ごと移動する
+  probe.ground = null; probe.walls = [];
+  if (state.fly) {
+    // すでに飛行モードのときは、そのまま指定の高さで飛ぶ
+    state.flyH = hasAlt ? h + Math.max(alt, 2) : Math.max(state.flyH, h + CONFIG.EYE_HEIGHT);
+  }
+  if (typeof headingDeg === "number") state.heading = Cesium.Math.toRadians(headingDeg);
+  state.ready = true;
+}
+
+// ============================================================
+// 駅名検索（入力すると駅の候補が出て、選ぶとその駅へ移動する）
+// 駅の位置は、国土地理院の住所検索API（無料・登録不要）から取得する
+// ============================================================
+const GSI_SEARCH = "https://msearch.gsi.go.jp/address-search/AddressSearch?q=";
+const PREFS = ["北海道", "青森県", "岩手県", "宮城県", "秋田県", "山形県", "福島県", "茨城県", "栃木県", "群馬県", "埼玉県", "千葉県", "東京都", "神奈川県",
+  "新潟県", "富山県", "石川県", "福井県", "山梨県", "長野県", "岐阜県", "静岡県", "愛知県", "三重県", "滋賀県", "京都府", "大阪府", "兵庫県", "奈良県",
+  "和歌山県", "鳥取県", "島根県", "岡山県", "広島県", "山口県", "徳島県", "香川県", "愛媛県", "高知県", "福岡県", "佐賀県", "長崎県", "熊本県", "大分県",
+  "宮崎県", "鹿児島県", "沖縄県"];
+const prefOf = (code) => PREFS[parseInt(String(code || "").padStart(5, "0").slice(0, 2), 10) - 1] || "";
+const suggCache = new Map();
+let suggAbort = null, suggTimer = null, suggItems = [], suggIdx = -1, suggSeq = 0, suggFor = "";
+
+async function fetchStations(text) {
+  const key = text.trim();
+  if (suggCache.has(key)) return suggCache.get(key);
+  const qs = [key];
+  if (!/駅$/.test(key)) qs.push(key + "駅");   // 「渋谷」でも「渋谷駅」でも探す（駅が他の地名に埋もれないように）
+  const signal = suggAbort ? suggAbort.signal : undefined;
+  const results = await Promise.all(qs.map(async (q) => {
+    const r = await fetch(GSI_SEARCH + encodeURIComponent(q), { signal });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  }));
+  const out = [];
+  for (const arr of results) {
+    // 返り値は地物の配列。念のため {features: [...]} の形でも読めるようにしてある
+    for (const f of (Array.isArray(arr) ? arr : (arr && Array.isArray(arr.features) ? arr.features : []))) {
+      const title = f && f.properties && f.properties.title;
+      const c = f && f.geometry && f.geometry.coordinates;
+      if (!title || !c || !/駅$/.test(title)) continue;   // 駅以外（住所・学校・交番など）は出さない
+      const lon = Number(c[0]), lat = Number(c[1]);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+      // 同じ駅が路線ごとに別の点で返ってくることがあるので、600m以内の同名は1つにまとめる
+      if (out.some(o => o.title === title && Math.abs(o.lat - lat) < 0.006 && Math.abs(o.lon - lon) < 0.006)) continue;
+      out.push({ title, lat, lon, pref: prefOf(f.properties.addressCode) });
+    }
+  }
+  const base = key.replace(/駅$/, "");
+  out.sort((a, b) => (b.title.startsWith(base) ? 1 : 0) - (a.title.startsWith(base) ? 1 : 0));   // 入力で始まる駅を先に
+  suggCache.set(key, out);
+  return out;
+}
+
+function distLabel(it) {
+  const dN = (it.lat - state.lat) * 110.574;
+  const dE = (it.lon - state.lon) * 111.32 * Math.cos(state.lat * Math.PI / 180);
+  const km = Math.hypot(dN, dE);
+  return km < 1 ? "約" + Math.round(km * 1000) + "m" : "約" + (km < 10 ? km.toFixed(1) : Math.round(km)) + "km";
+}
+
+function renderSugg(items, note) {
+  const box = $("sugg");
+  suggItems = items; suggIdx = -1;
+  box.textContent = "";
+  if (!items.length && !note) { box.classList.add("hidden"); return; }
+  items.forEach((it, i) => {
+    const row = document.createElement("div");
+    row.className = "it"; row.dataset.i = i;
+    const a = document.createElement("span"); a.textContent = "🚉 " + it.title;
+    const b = document.createElement("small"); b.textContent = (it.pref ? it.pref + "　" : "") + distLabel(it);
+    row.append(a, b);
+    box.appendChild(row);
+  });
+  if (note) { const n = document.createElement("div"); n.className = "note"; n.textContent = note; box.appendChild(n); }
+  box.classList.remove("hidden");
+}
+function highlightSugg() {
+  $("sugg").querySelectorAll(".it").forEach((el, i) => el.classList.toggle("act", i === suggIdx));
+}
+
+async function runSuggest(t) {
+  const seq = ++suggSeq;
+  if (suggAbort) suggAbort.abort();
+  suggAbort = new AbortController();
+  try {
+    const items = await fetchStations(t);
+    if (seq !== suggSeq) return;
+    suggFor = t;
+    renderSugg(items.slice(0, 8), items.length ? "" : "「" + t + "」に合う駅が見つかりません");
+  } catch (err) {
+    if (err && err.name === "AbortError") return;
+    if (seq !== suggSeq) return;
+    suggFor = t;
+    renderSugg([], "駅名の検索サービスにつなげませんでした（通信を確認してください）");
+  }
+}
+
+$("tpInput").addEventListener("input", () => {
+  const t = $("tpInput").value.trim();
+  clearTimeout(suggTimer);
+  if (!t || parseLatLon(t)) { suggSeq++; suggFor = ""; renderSugg([]); return; }   // 座標を入力しているときは候補を出さない
+  suggTimer = setTimeout(() => runSuggest(t), 250);
+});
+$("tpInput").addEventListener("keydown", (e) => {
+  if (!suggItems.length) return;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    const n = suggItems.length;
+    suggIdx = e.key === "ArrowDown" ? (suggIdx + 1) % n : (suggIdx - 1 + n) % n;
+    highlightSugg();
+  } else if (e.key === "Escape") {
+    renderSugg([]);
+  }
+});
+$("tpInput").addEventListener("blur", () => setTimeout(() => renderSugg([]), 150));
+// 候補を押したときに入力欄からフォーカスが外れて消えてしまわないよう、pointerdown で選ぶ
+$("sugg").addEventListener("pointerdown", (e) => {
+  const row = e.target.closest(".it");
+  if (!row) return;
+  e.preventDefault();
+  chooseStation(suggItems[+row.dataset.i]);
+});
+
+async function chooseStation(it) {
+  if (!it) return;
+  suggSeq++;
+  renderSugg([]);
+  $("tpInput").value = it.title;
+  $("tpmsg").textContent = "";
+  await teleport(it.lat, it.lon);
+  setSettings(false);
+  toast(it.title + " へ移動しました");
+  $("tpInput").blur();
+}
+
+$("tp").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const text = $("tpInput").value;
+  const p = parseLatLonAlt(text);
+  if (!p) {
+    const t = text.trim();
+    if (!t) { $("tpmsg").textContent = "駅名、または「緯度, 経度, 高さ(省略可)」を入力してください"; return; }
+    // 駅名: 候補を矢印キーで選んでいればその駅、そうでなければ先頭の候補へ（候補が古いときは検索し直す）
+    let it = suggFor === t ? (suggIdx >= 0 ? suggItems[suggIdx] : suggItems[0]) : null;
+    if (!it) {
+      try { it = (await fetchStations(t))[0]; }
+      catch (err) { $("tpmsg").textContent = "駅名の検索サービスにつなげませんでした（通信を確認してください）"; return; }
+    }
+    if (!it) { $("tpmsg").textContent = "「" + t + "」に合う駅が見つかりません"; return; }
+    await chooseStation(it);
+    return;
+  }
+  $("tpmsg").textContent = "";
+  await teleport(p.lat, p.lon, undefined, p.alt);
+  setSettings(false);
+  toast("移動しました");
+  $("tpInput").blur();
+});
+
+// ============================================================
+// インベントリ（ホットバー）・車・旗レース
+// ============================================================
+const ITEMS = {
+  hand:       { name: "手（乗る・降りる）", icon: "✋", kind: "hand" },
+  car_red:    { name: "スポーツカー（赤）", icon: "🏎️", kind: "car", color: "#d62828", max: 55, accel: 20, steer: 1.9 },
+  car_race:   { name: "レーシングカー（白）", icon: "🏁", kind: "car", color: "#f2f2f2", max: 70, accel: 28, steer: 1.7, spoiler: true },
+  car_blue:   { name: "ファミリーカー（青）", icon: "🚗", kind: "car", color: "#2563eb", max: 38, accel: 13, steer: 2.1 },
+  car_taxi:   { name: "タクシー（黄）", icon: "🚕", kind: "car", color: "#f5c518", max: 30, accel: 11, steer: 2.2 },
+  flag:       { name: "チェックポイント旗（1本目=スタート、最後の旗=ゴール）", icon: "🚩", kind: "flag" },
+  clearflags: { name: "旗を全部片付ける", icon: "🧹", kind: "clearflags" },
+};
+const ITEM_ORDER = Object.keys(ITEMS);
+const inv = { slots: ["hand", "car_red", "car_race", "car_blue", "car_taxi", "flag", "clearflags", null, null], sel: 0 };
+try {
+  const saved = JSON.parse(localStorage.getItem("sw3d_inv") || "null");
+  if (saved && Array.isArray(saved.slots) && saved.slots.length === 9) inv.slots = saved.slots.map(x => (ITEMS[x] ? x : null));
+} catch (e) { /* 保存データがなければ初期のまま */ }
+function saveInv() { try { localStorage.setItem("sw3d_inv", JSON.stringify({ slots: inv.slots })); } catch (e) { /* 保存できなくても動く */ } }
+
+let toastTimer = null;
+function toast(msg) {
+  const el = $("toast");
+  el.textContent = msg; el.style.opacity = 1;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.style.opacity = 0; }, 2200);
+}
+let nameTimer = null;
+function showItemName() {
+  const id = inv.slots[inv.sel];
+  const el = $("itemName");
+  el.textContent = id ? ITEMS[id].name : "";
+  el.style.opacity = 1;
+  clearTimeout(nameTimer);
+  nameTimer = setTimeout(() => { el.style.opacity = 0; }, 1800);
+}
+
+function renderInv() {
+  const mk = (i) => {
+    const id = inv.slots[i];
+    const it = id ? ITEMS[id] : null;
+    return `<div class="slot${i === inv.sel ? " sel" : ""}" data-i="${i}" title="${it ? it.name : "空"}"><span class="num">${i + 1}</span><span class="ic">${it ? it.icon : ""}</span></div>`;
+  };
+  let h = "";
+  for (let i = 0; i < 9; i++) h += mk(i);
+  $("hotbar").innerHTML = h;
+  $("invHot").innerHTML = h;
+  let g = "";
+  for (let k = 0; k < 27; k++) {
+    const id = ITEM_ORDER[k];
+    const it = id ? ITEMS[id] : null;
+    g += `<div class="slot" data-k="${k}" title="${it ? it.name : ""}"><span class="ic">${it ? it.icon : ""}</span></div>`;
+  }
+  $("invGrid").innerHTML = g;
+  const cur = inv.slots[inv.sel];
+  $("invSel").textContent = "選択中: " + (cur ? ITEMS[cur].name : "なし");
+}
+function selectSlot(i) { inv.sel = i; renderInv(); showItemName(); }
+
+function setInv(open) {
+  if (open && state.setOpen) setSettings(false);
+  state.invOpen = open;
+  $("inv").classList.toggle("hidden", !open);
+  if (open) {
+    keys.clear(); state.holdStart = null; touchMove.x = 0; touchMove.y = 0;
+    if (document.exitPointerLock) document.exitPointerLock();
+    renderInv();
+  }
+}
+function setHideUi(v) {
+  state.hideUi = v;
+  document.body.classList.toggle("hideui", v);
+  if (v && state.invOpen) setInv(false);
+  if (v && state.setOpen) setSettings(false);
+}
+
+$("hotbar").addEventListener("pointerdown", (e) => {
+  const s = e.target.closest(".slot");
+  if (s) { e.preventDefault(); selectSlot(+s.dataset.i); }
+});
+$("invHot").addEventListener("click", (e) => {
+  const s = e.target.closest(".slot");
+  if (s) selectSlot(+s.dataset.i);
+});
+$("invGrid").addEventListener("click", (e) => {
+  const s = e.target.closest(".slot");
+  if (!s) return;
+  const id = ITEM_ORDER[+s.dataset.k];
+  if (!id) return;
+  inv.slots[inv.sel] = id;
+  saveInv(); renderInv(); showItemName();
+});
+$("invClose").addEventListener("click", () => setInv(false));
+$("invBtn").addEventListener("click", (e) => { setInv(!state.invOpen); e.currentTarget.blur(); });
+$("uiBtn").addEventListener("click", (e) => { setHideUi(!state.hideUi); e.currentTarget.blur(); });
+$("useBtn").addEventListener("pointerdown", (e) => { e.preventDefault(); useItem(); });
+window.addEventListener("wheel", (e) => {
+  if (state.invOpen || state.setOpen || isTyping()) return;
+  if (state.spectator) {   // スペクテーターでは、ホイールで飛ぶ速さを変える
+    state.specMul = Math.max(0.1, Math.min(12, state.specMul * (e.deltaY < 0 ? 1.25 : 0.8)));
+    toast("スペクテーターの速さ " + Math.round(CONFIG.SPECTATOR_SPEED * state.specMul) + " m/秒");
+    return;
+  }
+  selectSlot((inv.sel + (e.deltaY > 0 ? 1 : 8)) % 9);
+}, { passive: true });
+renderInv();
+
+// ---- 車 ----
+const car = { exists: false, driving: false, def: null, prim: null, lat: 0, lon: 0, h: 0, heading: 0, camHeading: 0, speed: 0,
+              vy: 0, onGround: false, view: 0, lastHud: 0 };
+const avatar = { prim: null };   // 三人称視点で見える自分の体
+const wrapPi = (a) => { a = (a + Math.PI) % (2 * Math.PI); if (a < 0) a += 2 * Math.PI; return a - Math.PI; };
+
+function makeCarPrimitive(def) {
+  const VF = Cesium.PerInstanceColorAppearance.VERTEX_FORMAT;
+  const col = (css) => Cesium.ColorGeometryInstanceAttribute.fromColor(Cesium.Color.fromCssColorString(css));
+  const inst = [];
+  // 箱を作る。車の向き: x=右, y=前, z=上（地面が z=0）
+  const box = (sx, sy, sz, x, y, z, css) => inst.push(new Cesium.GeometryInstance({
+    geometry: Cesium.BoxGeometry.fromDimensions({ dimensions: new Cesium.Cartesian3(sx, sy, sz), vertexFormat: VF }),
+    modelMatrix: Cesium.Matrix4.fromTranslation(new Cesium.Cartesian3(x, y, z)),
+    attributes: { color: col(css) },
+  }));
+  const wheel = (x, y) => {
+    const m = Cesium.Matrix4.multiply(
+      Cesium.Matrix4.fromTranslation(new Cesium.Cartesian3(x, y, 0.36)),
+      Cesium.Matrix4.fromRotationTranslation(Cesium.Matrix3.fromRotationY(Math.PI / 2)),
+      new Cesium.Matrix4());
+    inst.push(new Cesium.GeometryInstance({
+      geometry: new Cesium.CylinderGeometry({ length: 0.3, topRadius: 0.36, bottomRadius: 0.36, slices: 16, vertexFormat: VF }),
+      modelMatrix: m,
+      attributes: { color: col("#151515") },
+    }));
+  };
+  box(1.85, 4.3, 0.55, 0, 0, 0.62, def.color);        // 車体
+  box(1.55, 2.0, 0.5, 0, -0.25, 1.15, "#1c2b3a");     // 窓
+  box(1.5, 1.8, 0.06, 0, -0.25, 1.43, def.color);     // 屋根
+  box(0.4, 0.08, 0.16, -0.6, 2.17, 0.72, "#fff7c2");  // ヘッドライト
+  box(0.4, 0.08, 0.16, 0.6, 2.17, 0.72, "#fff7c2");
+  box(0.4, 0.08, 0.16, -0.65, -2.17, 0.72, "#ff2a2a"); // テールライト
+  box(0.4, 0.08, 0.16, 0.65, -2.17, 0.72, "#ff2a2a");
+  if (def.spoiler) box(1.7, 0.35, 0.06, 0, -2.0, 1.2, "#111"); // 後ろの羽根
+  wheel(-0.95, 1.4); wheel(0.95, 1.4); wheel(-0.95, -1.4); wheel(0.95, -1.4);
+  return viewer.scene.primitives.add(new Cesium.Primitive({
+    geometryInstances: inst,
+    appearance: new Cesium.PerInstanceColorAppearance({ translucent: false, closed: true }),
+    asynchronous: false,
+    allowPicking: false,
+  }));
+}
+
+function updateCarPrim() {
+  if (!car.prim) return;
+  const enu = Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(car.lon, car.lat, car.h));
+  const rot = Cesium.Matrix4.fromRotationTranslation(Cesium.Matrix3.fromRotationZ(-car.heading));
+  car.prim.modelMatrix = Cesium.Matrix4.multiply(enu, rot, new Cesium.Matrix4());
+}
+
+function spawnCar(id) {
+  const def = ITEMS[id];
+  if (car.prim) { viewer.scene.primitives.remove(car.prim); car.prim = null; }
+  car.def = def;
+  car.prim = makeCarPrimitive(def);
+  const o = metersToDegrees(state.lat, Math.cos(state.heading) * 5, Math.sin(state.heading) * 5);
+  car.lat = state.lat + o.dLat; car.lon = state.lon + o.dLon;
+  car.heading = state.heading;
+  car.h = state.onGround ? state.feetH : state.groundH;   // あとは歩行と同じ重力・地面の計算で、地面に合う
+  car.vy = 0; car.onGround = false; car.speed = 0;
+  car.exists = true;
+  updateCarPrim();
+  enterCar();
+}
+
+function enterCar() {
+  car.driving = true;
+  car.camHeading = car.heading;
+  state.fly = false; state.spectator = false; state.holdStart = null;
+  keys.clear();
+  $("carHud").style.display = "block";
+  if (avatar.prim) avatar.prim.show = false;
+  updateViewBtn();
+  toast("運転開始: W/S アクセル・ブレーキ、A/D ハンドル、Space ジャンプ、Shift ブースト、B ブレーキ、V 視点、R 降りる");
+}
+function exitCar() {
+  car.driving = false;
+  car.speed = 0;
+  // 車の左側に降りる
+  const o = metersToDegrees(car.lat, Math.sin(car.heading) * 3.5, -Math.cos(car.heading) * 3.5);
+  state.lat = car.lat + o.dLat; state.lon = car.lon + o.dLon;
+  state.heading = car.heading; state.pitch = 0;
+  state.feetH = car.h; state.vy = 0; state.onGround = false;
+  probe.ground = null; probe.walls = [];
+  $("carHud").style.display = "none";
+  updateViewBtn();
+}
+function toggleRide() {
+  if (car.driving) { exitCar(); return; }
+  if (!car.exists) { toast("車がありません。ホットバーの車を選んで「使う」で出せます"); return; }
+  const dN = (car.lat - state.lat) * 110574;
+  const dE = (car.lon - state.lon) * 111320 * Math.cos(state.lat * Math.PI / 180);
+  if (Math.hypot(dN, dE) < 8) enterCar(); else toast("車が遠いです（8m以内に近づいてください）");
+}
+
+// ---- 旗（チェックポイント）とタイム計測 ----
+// 1本目の旗=スタート、最後に置いた旗=ゴール。途中の旗は順番に通るチェックポイント。
+// CONFIG.RACE_LOOP が true のときは周回コース（最後の旗のあと、1本目に戻るとゴール）。
+const flags = [];   // { lat, lon, ent }
+const race = { running: false, armed: false, step: 0, t0: 0, runs: 0, best: null, last: null };
+const fmtTime = (ms) => { const s = ms / 1000; const m = Math.floor(s / 60); return m + ":" + (s - m * 60).toFixed(1).padStart(4, "0"); };
+
+// スタートのあとに通る旗の番号の並び（最後がゴール）
+function raceSeq() {
+  const seq = [];
+  for (let i = 1; i < flags.length; i++) seq.push(i);
+  if (CONFIG.RACE_LOOP && flags.length >= 2) seq.push(0);
+  return seq;
+}
+function resetRace() {
+  race.running = false; race.armed = false; race.step = 0; race.runs = 0; race.best = null; race.last = null;
+  relabelFlags();
+}
+// 旗の文字と色: スタート=緑、ゴール=赤、途中=オレンジ、いま向かう旗=黄色
+function relabelFlags() {
+  const seq = raceSeq();
+  const goal = seq.length ? seq[seq.length - 1] : -1;
+  const target = race.running ? seq[race.step] : -1;
+  flags.forEach((f, i) => {
+    let text, color;
+    if (i === 0) { text = goal === 0 ? "START / GOAL" : "START"; color = Cesium.Color.LIME; }
+    else if (i === goal) { text = "GOAL"; color = Cesium.Color.RED; }
+    else { text = String(i + 1); color = Cesium.Color.ORANGE; }
+    if (i === target) color = Cesium.Color.YELLOW;
+    f.ent.label.text = text;
+    f.ent.cylinder.material = color;
+  });
+}
+function placeFlag() {
+  const lat = car.driving ? car.lat : state.lat, lon = car.driving ? car.lon : state.lon;
+  const h = car.driving ? car.h : (state.onGround ? state.feetH : state.groundH);
+  const idx = flags.length;
+  const ent = viewer.entities.add({
+    position: Cesium.Cartesian3.fromDegrees(lon, lat, h + 5),
+    cylinder: { length: 10, topRadius: 0.2, bottomRadius: 0.2, material: Cesium.Color.ORANGE },
+    label: {
+      text: "START", font: "bold 20px sans-serif",
+      fillColor: Cesium.Color.WHITE, outlineColor: Cesium.Color.BLACK, outlineWidth: 4, style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM, pixelOffset: new Cesium.Cartesian2(0, -4),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+  });
+  flags.push({ lat, lon, ent });
+  resetRace();
+  if (idx === 0) toast("スタートの旗を置きました。続けて旗を置くとコースになり、" + (CONFIG.RACE_LOOP ? "1本目に戻るとゴールです" : "最後の旗がゴールです"));
+  else toast((idx + 1) + "本目の旗を置きました" + (CONFIG.RACE_LOOP ? "" : "（いまの最後の旗がゴール）"));
+}
+function clearFlags() {
+  for (const f of flags) viewer.entities.remove(f.ent);
+  flags.length = 0;
+  resetRace();
+  toast("旗を片付けました");
+}
+function updateRace(now) {
+  if (flags.length < 2) return;
+  const near = (f) => {
+    const dN = (f.lat - car.lat) * 110574;
+    const dE = (f.lon - car.lon) * 111320 * Math.cos(car.lat * Math.PI / 180);
+    return Math.hypot(dN, dE) <= CONFIG.RACE_RADIUS;
+  };
+  const seq = raceSeq();
+  const atStart = near(flags[0]);
+  if (!race.running) {
+    // スタート旗の円の中に入って、そこから出ると、タイム計測が始まる
+    if (atStart) race.armed = true;
+    else if (race.armed) {
+      race.armed = false; race.running = true; race.step = 0; race.t0 = now;
+      toast("スタート！");
+      relabelFlags();
+    }
+    return;
+  }
+  if (!near(flags[seq[race.step]])) return;
+  race.step++;
+  if (race.step >= seq.length) {
+    // ゴール
+    race.last = now - race.t0; race.runs++;
+    const isBest = race.best === null || race.last < race.best;
+    if (isBest) race.best = race.last;
+    race.running = false;
+    race.armed = atStart;   // 周回コースでは、ゴール(=スタート)の円から出ると次の周が始まる
+    toast("ゴール！ " + fmtTime(race.last) + (isBest ? "（ベスト）" : ""));
+  } else {
+    toast("チェックポイント通過 " + race.step + "/" + (seq.length - 1));
+  }
+  relabelFlags();
+}
+
+function useItem() {
+  if (!state.ready || state.invOpen) return;
+  const id = inv.slots[inv.sel];
+  const it = id ? ITEMS[id] : null;
+  if (!it) return;
+  if (it.kind === "hand") toggleRide();
+  else if (it.kind === "car") spawnCar(id);
+  else if (it.kind === "flag") placeFlag();
+  else if (it.kind === "clearflags") clearFlags();
+}
+
+function driveCar(dt, now) {
+  const def = car.def;
+  const clamp1 = (v) => Math.max(-1, Math.min(1, v));
+  const thr = clamp1((keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0) + touchMove.y);
+  const str = clamp1((keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0) + touchMove.x);
+  const boost = keys.has("ShiftLeft") || keys.has("ShiftRight");
+  const brake = keys.has("KeyB");                // B = ブレーキ（Space はジャンプ）
+  const wantJump = jumpQueued;
+  jumpQueued = false;
+
+  // 速度
+  const maxF = def.max * (boost ? 1.2 : 1);
+  let v = car.speed;
+  if (thr > 0) {
+    if (v < 0) v += 40 * dt;                                                      // 後退中は先にブレーキ
+    else v += def.accel * (boost ? 1.5 : 1) * thr * Math.max(0, 1 - v / maxF) * dt; // 速いほど加速が鈍る
+  } else if (thr < 0) {
+    if (v > 0) v += thr * 40 * dt;                                                // ブレーキ
+    else v += thr * 8 * dt * Math.max(0, 1 - (-v) / (def.max * 0.3));             // 後退
+  } else {
+    v -= Math.sign(v) * Math.min(Math.abs(v), 4 * dt);                            // 自然に減速
+  }
+  if (brake) v -= Math.sign(v) * Math.min(Math.abs(v), 55 * dt);
+  car.speed = Math.max(-def.max * 0.3, Math.min(maxF, v));
+
+  // ハンドル（速いほど曲がりにくく、止まっていると曲がらない。後退では逆向き）
+  const sp = Math.abs(car.speed);
+  car.heading += str * (def.steer / (1 + sp / 22)) * Math.min(1, sp / 5) * Math.sign(car.speed) * dt;
+
+  // 当たり判定: 歩いているときと同じ計算（壁に向かう動きを clipMove で止める）
+  // 壁・足元の面・段差は runProbes が一定間隔で調べている。車用に変えているのは大きさ（CAR_RADIUS）だけ
+  const mv = car.speed * dt;
+  let dN = Math.cos(car.heading) * mv, dE = Math.sin(car.heading) * mv;
+  const moving = Math.abs(mv) > 1e-9;
+  probe.intentN = moving ? dN : 0;
+  probe.intentE = moving ? dE : 0;
+  if (state.collide && !probe.error && probe.walls.length) {
+    const c = clipMove(dN, dE, probe.walls, now, CONFIG.CAR_RADIUS, 600);
+    if (moving) {
+      // 壁にふさがれた分だけ速度を落とす（正面なら止まり、かすめるだけなら少し減る）
+      const along = c.n * Math.cos(car.heading) + c.e * Math.sin(car.heading);
+      const ratio = Math.max(0, Math.min(1, along / mv));
+      if (ratio < 0.02) car.speed = 0;                              // ほぼ完全にふさがれたら止まる
+      else car.speed *= 1 - (1 - ratio) * Math.min(1, dt * 12);     // かすめるだけなら少し減る
+    }
+    dN = c.n; dE = c.e;
+  }
+  const dd = metersToDegrees(car.lat, dN, dE);
+  car.lat += dd.dLat; car.lon += dd.dLon;
+  state.lat = car.lat; state.lon = car.lon;
+
+  // 地形データの高さ
+  let g;
+  if (MAP_MODE === "google") { requestGround(now); g = state.targetGround; }
+  else g = viewer.scene.globe.getHeight(Cesium.Cartographic.fromDegrees(car.lon, car.lat));
+  if (typeof g === "number") state.groundH += (g - state.groundH) * Math.min(1, dt * 12);
+
+  // 重力と地面: 歩行と同じ stepPhysics。立てる面は、当たり判定がONなら地図の面（建物や屋根を含む）、そうでなければ地形
+  const surface = (state.collide && !probe.error && typeof probe.ground === "number") ? probe.ground : state.groundH;
+  const cp = { feetH: car.h, vy: car.vy, onGround: car.onGround };
+  stepPhysics(cp, surface, wantJump, dt, {
+    jump: CONFIG.CAR_JUMP_SPEED, gravity: CONFIG.GRAVITY, dropLimit: CONFIG.MAX_STEP, follow: CONFIG.CAR_FOLLOW, maxFall: CONFIG.MAX_FALL_SPEED,
+  });
+  car.h = cp.feetH; car.vy = cp.vy; car.onGround = cp.onGround;
+  state.feetH = car.h; state.onGround = car.onGround; state.vy = 0;
+
+  updateRace(now);
+  updateCarPrim();
+
+  // カメラ（V で 三人称（後ろから）/ 一人称（運転席）を切り替え）
+  car.camHeading += wrapPi(car.heading - car.camHeading) * Math.min(1, dt * 5);
+  let lat, lon, hgt, pitch, head;
+  if (car.view === 0) {
+    head = car.camHeading; pitch = -0.3;
+    const back = 8 + sp * 0.05;
+    const o = metersToDegrees(car.lat, -Math.cos(head) * back, -Math.sin(head) * back);
+    lat = car.lat + o.dLat; lon = car.lon + o.dLon; hgt = car.h + 3.2;
+  } else {
+    head = car.heading; pitch = 0;
+    const o = metersToDegrees(car.lat, Math.cos(head) * 0.3, Math.sin(head) * 0.3);
+    lat = car.lat + o.dLat; lon = car.lon + o.dLon; hgt = car.h + 1.25;
+  }
+  state.heading = head;
+  viewer.camera.setView({
+    destination: Cesium.Cartesian3.fromDegrees(lon, lat, hgt),
+    orientation: { heading: head, pitch, roll: 0 },
+  });
+
+  // メーター
+  if (now - car.lastHud > 100) {
+    car.lastHud = now;
+    let t = `<div class="spd">${Math.round(sp * 3.6)} <small>km/h</small></div>`;
+    if (flags.length < 2) {
+      t += `<div class="sub">旗アイテムを2本以上置くと、スタート〜ゴールのタイムを計測できます（最後の旗がゴール）</div>`;
+    } else if (race.running) {
+      const seq = raceSeq();
+      const tg = seq[race.step];
+      const nm = tg === seq[seq.length - 1] ? "ゴール" : "旗" + (tg + 1);
+      t += `<div class="sub">TIME ${fmtTime(now - race.t0)}　次: ${nm}　BEST ${race.best !== null ? fmtTime(race.best) : "--"}</div>`;
+    } else {
+      t += `<div class="sub">緑のスタート旗の円に入って、出るとタイム計測開始　${race.last !== null ? "前回 " + fmtTime(race.last) + "　BEST " + fmtTime(race.best) : ""}</div>`;
+    }
+    $("carHud").innerHTML = t;
+  }
+  updateHud(now, hgt);
+}
+
+// ============================================================
+// 視点（一人称 / 三人称）
+// ============================================================
+function makeAvatarPrimitive() {
+  const VF = Cesium.PerInstanceColorAppearance.VERTEX_FORMAT;
+  const col = (css) => Cesium.ColorGeometryInstanceAttribute.fromColor(Cesium.Color.fromCssColorString(css));
+  const inst = [];
+  // 体の向き: x=右, y=前, z=上（足元が z=0）
+  const box = (sx, sy, sz, x, y, z, css) => inst.push(new Cesium.GeometryInstance({
+    geometry: Cesium.BoxGeometry.fromDimensions({ dimensions: new Cesium.Cartesian3(sx, sy, sz), vertexFormat: VF }),
+    modelMatrix: Cesium.Matrix4.fromTranslation(new Cesium.Cartesian3(x, y, z)),
+    attributes: { color: col(css) },
+  }));
+  box(0.22, 0.26, 0.8, -0.14, 0, 0.4, "#2b3a67");    // 脚
+  box(0.22, 0.26, 0.8, 0.14, 0, 0.4, "#2b3a67");
+  box(0.52, 0.3, 0.62, 0, 0, 1.11, "#e07a1f");       // 胴
+  box(0.14, 0.2, 0.6, -0.34, 0, 1.12, "#d06a12");    // 腕
+  box(0.14, 0.2, 0.6, 0.34, 0, 1.12, "#d06a12");
+  box(0.28, 0.28, 0.28, 0, 0, 1.58, "#f1c6a0");      // 頭
+  box(0.3, 0.3, 0.1, 0, -0.01, 1.76, "#3b2a1a");     // 髪
+  box(0.08, 0.04, 0.06, 0, 0.15, 1.58, "#c08860");   // 鼻（前の目印）
+  return viewer.scene.primitives.add(new Cesium.Primitive({
+    geometryInstances: inst,
+    appearance: new Cesium.PerInstanceColorAppearance({ translucent: false, closed: true }),
+    asynchronous: false,
+    allowPicking: false,
+  }));
+}
+function updateAvatar() {
+  if (!state.third || car.driving) { if (avatar.prim) avatar.prim.show = false; return; }
+  if (!avatar.prim) avatar.prim = makeAvatarPrimitive();
+  avatar.prim.show = true;
+  const enu = Cesium.Transforms.eastNorthUpToFixedFrame(Cesium.Cartesian3.fromDegrees(state.lon, state.lat, state.feetH));
+  const rot = Cesium.Matrix4.fromRotationTranslation(Cesium.Matrix3.fromRotationZ(-state.heading));
+  avatar.prim.modelMatrix = Cesium.Matrix4.multiply(enu, rot, new Cesium.Matrix4());
+}
+function isThirdView() { return car.driving ? car.view === 0 : state.third; }
+function updateViewBtn() {
+  $("vBtn").textContent = "視点: " + (isThirdView() ? "三人称" : "一人称");
+}
+function toggleView() {
+  if (car.driving) car.view = 1 - car.view;
+  else { state.third = !state.third; state.thirdDist = CONFIG.THIRD_DIST; }
+  updateViewBtn();
+  toast(isThirdView() ? "三人称視点" : "一人称視点");
+}
+$("vBtn").addEventListener("click", (e) => { toggleView(); e.currentTarget.blur(); });
+$("viewBtn").addEventListener("click", (e) => { toggleView(); e.currentTarget.blur(); });
+updateViewBtn();
+
+// ============================================================
+// 設定（左上にあったパネルを、ボタンひとつで真ん中に出す）
+// ============================================================
+function setSettings(open) {
+  open = !!open;
+  if (open && state.invOpen) setInv(false);
+  state.setOpen = open;
+  $("settings").classList.toggle("hidden", !open);
+  if (open) {
+    keys.clear(); state.holdStart = null; touchMove.x = 0; touchMove.y = 0;
+    if (document.exitPointerLock) document.exitPointerLock();
+  } else {
+    renderSugg([]);
+    const a = document.activeElement;
+    if (a && a.blur) a.blur();
+  }
+}
+$("setBtn").addEventListener("click", (e) => { setSettings(!state.setOpen); e.currentTarget.blur(); });
+$("setClose").addEventListener("click", () => setSettings(false));
+$("settings").addEventListener("pointerdown", (e) => { if (e.target === $("settings")) setSettings(false); });
+$("settings").addEventListener("wheel", (e) => e.stopPropagation(), { passive: true });
+
+// ============================================================
+// ミニマップ（左下。国土地理院の地図タイル。北が上 / 進行方向が上 を切り替えられる）
+// ============================================================
+const MINI_URL = (z, x, y) => "https://cyberjapandata.gsi.go.jp/xyz/pale/" + z + "/" + x + "/" + y + ".png";
+function miniTile(z, x, y) {
+  const key = z + "/" + x + "/" + y;
+  let t = mini.tiles.get(key);
+  if (!t) {
+    const img = new Image();
+    t = { img, ok: false };
+    img.onload = () => { t.ok = true; mini.last = 0; };
+    img.src = MINI_URL(z, x, y);
+    mini.tiles.set(key, t);
+    if (mini.tiles.size > 240) mini.tiles.delete(mini.tiles.keys().next().value);
+  }
+  return t;
+}
+function applyMiniButtons() {
+  $("mnBtn").textContent = "ミニマップ: " + (mini.on ? "ON" : "OFF");
+  $("mrBtn").textContent = "地図の向き: " + (mini.rot ? "進行方向が上" : "北が上");
+  $("miniZ").value = mini.z; $("miniZVal").textContent = "z" + mini.z;
+  if (mini.cv) mini.cv.style.display = mini.on ? "" : "none";
+}
+function initMini() {
+  try {
+    mini.cv = $("mini");
+    mini.ctx = mini.cv.getContext("2d");
+    if (!mini.ctx) throw new Error("no canvas");
+    mini.css = mini.cv.clientWidth || 150;
+    mini.dpr = Math.min(2, window.devicePixelRatio || 1);
+    mini.cv.width = Math.round(mini.css * mini.dpr);
+    mini.cv.height = Math.round(mini.css * mini.dpr);
+  } catch (e) { mini.err = true; }
+  applyMiniButtons();
+}
+function drawMini(now) {
+  if (!mini.on || mini.err || state.hideUi || now - mini.last < 150) return;
+  mini.last = now;
+  try {
+    const css = mini.cv.clientWidth || mini.css;
+    if (css !== mini.css) {   // 画面の向きや大きさが変わったとき
+      mini.css = css;
+      mini.cv.width = mini.cv.height = Math.round(css * mini.dpr);
+    }
+    const S = mini.css, D = mini.dpr, z = mini.z, n = Math.pow(2, z);
+    const ctx = mini.ctx;
+    const hd = car.driving ? car.heading : state.heading;
+    const c = lonLatToPx(state.lon, state.lat, z);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = "#cfd8dc"; ctx.fillRect(0, 0, S * D, S * D);
+    ctx.setTransform(D, 0, 0, D, 0, 0);
+    ctx.save();
+    ctx.translate(S / 2, S / 2);
+    if (mini.rot) ctx.rotate(-hd);
+    const ext = Math.ceil(S * 0.72);
+    const x0 = Math.floor((c.x - ext) / 256), x1 = Math.floor((c.x + ext) / 256);
+    const y0 = Math.max(0, Math.floor((c.y - ext) / 256)), y1 = Math.min(n - 1, Math.floor((c.y + ext) / 256));
+    for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) {
+      const t = miniTile(z, ((tx % n) + n) % n, ty);
+      if (t.ok) ctx.drawImage(t.img, tx * 256 - c.x, ty * 256 - c.y, 256.6, 256.6);
+    }
+    const at = (lat, lon) => { const p = lonLatToPx(lon, lat, z); return { x: p.x - c.x, y: p.y - c.y }; };
+    // 旗（スタート=緑 / ゴール=赤 / 途中=オレンジ）
+    const seq = raceSeq(), goal = seq.length ? seq[seq.length - 1] : -1;
+    flags.forEach((f, i) => {
+      const p = at(f.lat, f.lon);
+      ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = i === 0 ? "#22c55e" : (i === goal ? "#ef4444" : "#f59e0b");
+      ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = "#fff"; ctx.stroke();
+    });
+    // 降りて置いてある車
+    if (car.exists && !car.driving) {
+      const p = at(car.lat, car.lon);
+      ctx.fillStyle = car.def ? car.def.color : "#2563eb"; ctx.strokeStyle = "#111"; ctx.lineWidth = 1.5;
+      ctx.fillRect(p.x - 4, p.y - 4, 8, 8); ctx.strokeRect(p.x - 4, p.y - 4, 8, 8);
+    }
+    // 北の印
+    ctx.fillStyle = "#b91c1c"; ctx.font = "bold 11px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("N", 0, -S / 2 + 10);
+    ctx.restore();
+    // 自分（矢印は向いている方向）
+    ctx.save();
+    ctx.translate(S / 2, S / 2);
+    ctx.rotate(mini.rot ? 0 : hd);
+    ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(6.5, 8); ctx.lineTo(0, 4); ctx.lineTo(-6.5, 8); ctx.closePath();
+    ctx.fillStyle = "#e11d48"; ctx.fill(); ctx.lineWidth = 1.8; ctx.strokeStyle = "#fff"; ctx.stroke();
+    ctx.restore();
+    // 出典
+    ctx.font = "9px sans-serif"; ctx.textAlign = "right"; ctx.textBaseline = "alphabetic";
+    ctx.lineWidth = 3; ctx.strokeStyle = "rgba(255,255,255,.85)"; ctx.strokeText("地理院タイル", S - 4, S - 4);
+    ctx.fillStyle = "#333"; ctx.fillText("地理院タイル", S - 4, S - 4);
+  } catch (e) { mini.err = true; if (mini.cv) mini.cv.style.display = "none"; }
+}
+$("mnBtn").addEventListener("click", (e) => { mini.on = !mini.on; applyMiniButtons(); savePrefs(); e.currentTarget.blur(); });
+function toggleMiniRot() { mini.rot = !mini.rot; mini.last = 0; applyMiniButtons(); savePrefs(); }
+$("mrBtn").addEventListener("click", (e) => { toggleMiniRot(); e.currentTarget.blur(); });
+$("mini").addEventListener("pointerdown", (e) => { e.preventDefault(); toggleMiniRot(); toast(mini.rot ? "地図: 進行方向が上" : "地図: 北が上"); });
+bindSlider("miniZ", (v) => { mini.z = Math.round(numPref(v, 14, 18, 16)); mini.last = 0; applyMiniButtons(); });
+initMini();
+
+// ============================================================
+// 入力（キーボード / マウス / タッチ）
+// ============================================================
+const keys = new Set();
+const touchMove = { x: 0, y: 0 };
+let touchDown = false;      // 飛行中の「下降」ボタン（タッチ）
+let jumpQueued = false;     // ジャンプのボタンが押された（次のフレームで1回だけ使う）
+// ジャンプを素早く2回押すと、スペクテーター（壁を通り抜けて、見ている向きに自由に飛ぶ）に切り替わる。もう一度2回押すと戻る
+let lastJumpTap = 0;
+function registerJumpTap() {
+  const now = performance.now();
+  if (now - lastJumpTap < CONFIG.DOUBLE_TAP_MS) { lastJumpTap = 0; toggleSpectator(); return true; }
+  lastJumpTap = now;
+  return false;
+}
+function toggleSpectator() {
+  if (!state.ready || car.driving) return;
+  state.holdStart = null;
+  if (!state.spectator) {
+    state.specPrevFly = state.fly;
+    state.spectator = true; state.fly = true;
+    state.flyH = state.feetH + CONFIG.EYE_HEIGHT;   // いまの目の高さのまま浮く
+    state.vy = 0;
+    toast("スペクテーター（壁を通り抜けて飛べます。Space↑ C/Q↓、ホイールで速さ変更、ジャンプ2回で戻る）");
+  } else {
+    state.spectator = false;
+    state.fly = state.specPrevFly;
+    if (!state.fly) { state.vy = 0; state.onGround = false; }   // 歩行に戻ったら、その場から落ちる
+    toast("スペクテーターを終了しました");
+  }
+}
+
+const jumpBtn = $("jump");
+jumpBtn.addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  jumpBtn.setPointerCapture(e.pointerId);
+  if (!car.driving && registerJumpTap()) {
+    if (state.spectator) state.holdStart = performance.now();   // スペクテーターに入った直後に押し続けていれば、そのまま上昇
+    return;
+  }
+  jumpQueued = true;
+  state.holdStart = performance.now();
+});
+const endHold = () => { state.holdStart = null; };
+$("downBtn").addEventListener("pointerdown", (e) => { e.preventDefault(); $("downBtn").setPointerCapture(e.pointerId); touchDown = true; });
+const endDown = () => { touchDown = false; };
+$("downBtn").addEventListener("pointerup", endDown);
+$("downBtn").addEventListener("pointercancel", endDown);
+jumpBtn.addEventListener("pointerup", endHold);
+jumpBtn.addEventListener("pointercancel", endHold);
+const PITCH_LIMIT = Cesium.Math.toRadians(89);
+const clampPitch = (p) => Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, p));
+
+window.addEventListener("keydown", (e) => {
+  if (isTyping()) return;
+  // インベントリ・表示切替・アイテム操作
+  if (e.code === "KeyE" && !e.repeat) { setInv(!state.invOpen); return; }
+  if (e.code === "Escape" && state.invOpen) { setInv(false); return; }
+  if (e.code === "Escape" && state.setOpen) { setSettings(false); return; }
+  if (e.code === "KeyO" && !e.repeat) { setSettings(!state.setOpen); return; }
+  if (e.code === "KeyH" && !e.repeat) { setHideUi(!state.hideUi); return; }
+  if (state.invOpen || state.setOpen) return;
+  if (/^Digit[1-9]$/.test(e.code) && !e.repeat) { selectSlot(+e.code.slice(5) - 1); return; }
+  if (e.code === "KeyZ" && !e.repeat) { useItem(); return; }
+  if (e.code === "KeyR" && !e.repeat) { toggleRide(); return; }
+  if (e.code === "KeyV" && !e.repeat) { toggleView(); return; }
+  keys.add(e.code);
+  if (e.code === "KeyF" && !e.repeat && !car.driving) {
+    if (state.spectator) {   // スペクテーター中にFを押したら、歩行に戻る
+      state.spectator = false; state.fly = false; state.vy = 0; state.onGround = false;
+    } else {
+      state.fly = !state.fly;
+      if (state.fly) state.flyH = state.feetH + CONFIG.EYE_HEIGHT + 30;
+      else { state.vy = 0; state.onGround = false; }   // 飛行をやめたら、その場から落ちる
+    }
+  }
+  if (e.code === "KeyX" && !e.repeat) toggleCollision();
+  if (e.code === "Space" && !e.repeat) {
+    if (!car.driving && registerJumpTap()) { /* 2回押し: スペクテーターの切り替え */ }
+    else { jumpQueued = true; state.holdStart = performance.now(); }
+  }
+  if (e.code === "BracketRight" || e.code === "BracketLeft") {
+    state.buildingOffset += e.code === "BracketRight" ? 1 : -1;
+    applyBuildingOffset();
+  }
+  if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) e.preventDefault();
+});
+window.addEventListener("keyup", (e) => { keys.delete(e.code); if (e.code === "Space") state.holdStart = null; });
+window.addEventListener("blur", () => { keys.clear(); state.holdStart = null; });
+
+function setupPointerInput(canvas) {
+  document.addEventListener("mousemove", (e) => {
+    if (document.pointerLockElement !== canvas || car.driving) return;
+    state.heading += e.movementX * 0.0025;
+    state.pitch = clampPitch(state.pitch - e.movementY * 0.0025);
+  });
+
+  canvas.addEventListener("contextmenu", (e) => e.preventDefault());   // 右クリックは「アイテムを使う」に使う
+  let lookId = null, lastX = 0, lastY = 0;
+  canvas.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "mouse") {
+      if (e.button === 2) { useItem(); return; }
+      if (canvas.requestPointerLock && !state.invOpen && !state.setOpen) canvas.requestPointerLock();
+      return;
+    }
+    if (lookId === null && e.clientX > window.innerWidth * 0.35) {
+      lookId = e.pointerId; lastX = e.clientX; lastY = e.clientY;
+      canvas.setPointerCapture(e.pointerId);
+    }
+  });
+  canvas.addEventListener("pointermove", (e) => {
+    if (e.pointerId !== lookId || car.driving) return;
+    state.heading += (e.clientX - lastX) * 0.004;
+    state.pitch = clampPitch(state.pitch - (e.clientY - lastY) * 0.004);
+    lastX = e.clientX; lastY = e.clientY;
+  });
+  const endLook = (e) => { if (e.pointerId === lookId) lookId = null; };
+  canvas.addEventListener("pointerup", endLook);
+  canvas.addEventListener("pointercancel", endLook);
+
+  // 仮想ジョイスティック
+  const stick = $("stick"), knob = $("knob");
+  let stickId = null, cx = 0, cy = 0;
+  const MAXR = 50;
+  const updateStick = (e) => {
+    let dx = e.clientX - cx, dy = e.clientY - cy;
+    const len = Math.hypot(dx, dy);
+    if (len > MAXR) { dx *= MAXR / len; dy *= MAXR / len; }
+    knob.style.transform = `translate(${dx}px, ${dy}px)`;
+    touchMove.x = dx / MAXR;
+    touchMove.y = -dy / MAXR;
+  };
+  stick.addEventListener("pointerdown", (e) => {
+    stickId = e.pointerId;
+    stick.setPointerCapture(e.pointerId);
+    const r = stick.getBoundingClientRect();
+    cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+    updateStick(e);
+  });
+  stick.addEventListener("pointermove", (e) => { if (e.pointerId === stickId) updateStick(e); });
+  const endStick = (e) => {
+    if (e.pointerId !== stickId) return;
+    stickId = null; touchMove.x = 0; touchMove.y = 0;
+    knob.style.transform = "translate(0px, 0px)";
+  };
+  stick.addEventListener("pointerup", endStick);
+  stick.addEventListener("pointercancel", endStick);
+
+}
+
+// ============================================================
+// 毎フレームの更新
+// ============================================================
+let lastTime = performance.now();
+let lastHud = 0;
+let fpsFrames = 0, fpsT0 = performance.now();
+
+function updateHud(now, eyeH) {
+  if (!state.setOpen || now - lastHud <= 200) return;   // 情報は設定画面にしか出ないので、閉じている間は更新しない
+  lastHud = now;
+  const deg = ((Cesium.Math.toDegrees(state.heading) % 360) + 360) % 360;
+  const mode = car.driving ? "運転中" : (state.spectator ? "スペクテーター" : (state.fly ? "飛行" : (state.onGround ? "歩行" : "空中")));
+  $("info").textContent =
+    `FPS ${state.fps || "-"}  緯度 ${state.lat.toFixed(5)}  経度 ${state.lon.toFixed(5)}\n` +
+    `高さ ${eyeH.toFixed(1)} m (地上 ${(eyeH - state.groundH).toFixed(1)} m)  向き ${deg.toFixed(0)}°  ${mode}` +
+    `${probe.error ? "  判定エラー: " + probe.error : ""}\n` +
+    `建物: ${state.tilesetLabel}  補正 ${state.buildingOffset >= 0 ? "+" : ""}${state.buildingOffset} m\n` +
+    `高さ属性: ${heightProp === null ? "判定中" : (heightProp || "なし")}\n` +
+    `読み込み範囲 ${fmtDist(state.drawDistance)}  誤差 ${tileset ? tileset.maximumScreenSpaceError : "-"}  読み込み済み ${tileset && tileset.statistics ? tileset.statistics.numberOfTilesWithContentReady : "-"} タイル  取得待ち ${tileset && tileset.statistics ? tileset.statistics.numberOfPendingRequests + tileset.statistics.numberOfTilesProcessing : "-"}`;
+  $("info").style.whiteSpace = "pre";
+}
+
+function frame() {
+  const now = performance.now();
+  const dt = Math.min(0.1, (now - lastTime) / 1000);
+  lastTime = now;
+  fpsFrames++;
+  if (now - fpsT0 >= 500) { state.fps = Math.round(fpsFrames * 1000 / (now - fpsT0)); fpsFrames = 0; fpsT0 = now; }
+  if (!state.ready) return;
+  document.body.classList.toggle("flying", !!state.fly && !car.driving);
+  drawMini(now);
+
+  // 矢印キーで視点
+  if (keys.has("ArrowLeft")) state.heading -= 1.6 * dt;
+  if (keys.has("ArrowRight")) state.heading += 1.6 * dt;
+  if (keys.has("ArrowUp")) state.pitch = clampPitch(state.pitch + 1.2 * dt);
+  if (keys.has("ArrowDown")) state.pitch = clampPitch(state.pitch - 1.2 * dt);
+
+  // 運転中は車の処理だけ行う（歩く処理は飛ばす）
+  if (car.driving) { driveCar(dt, now); return; }
+  if (car.exists) updateCarPrim();
+
+  // 移動
+  let fwd = (keys.has("KeyW") ? 1 : 0) - (keys.has("KeyS") ? 1 : 0) + touchMove.y;
+  let right = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0) + touchMove.x;
+  const len = Math.hypot(fwd, right);
+  if (len > 1) { fwd /= len; right /= len; }
+  const run = keys.has("ShiftLeft") || keys.has("ShiftRight") || Math.hypot(touchMove.x, touchMove.y) > 0.95;
+  let speed = state.fly ? (state.spectator ? CONFIG.SPECTATOR_SPEED * state.specMul : CONFIG.FLY_SPEED) : (run ? CONFIG.RUN_SPEED : CONFIG.WALK_SPEED);
+  if (state.fly && run) speed *= 4;
+
+  const h = state.heading;
+  // スペクテーターでは、見ている向き（上下も）に進む。水平の分は見上げるほど小さくなる
+  const fwdH = fwd;   // スペクテーターでも前後左右は水平に進む（上下は Space と C / Q）
+  let dNorth = (fwdH * Math.cos(h) - right * Math.sin(h)) * speed * dt;
+  let dEast = (fwdH * Math.sin(h) + right * Math.cos(h)) * speed * dt;
+
+  // 当たり判定: 進もうとしている向きを記録して、壁に向かう分を取り除く
+  const moving = Math.hypot(dNorth, dEast) > 1e-9;
+  probe.intentN = moving ? dNorth : 0;
+  probe.intentE = moving ? dEast : 0;
+  if (state.collide && !state.fly && !probe.error && probe.walls.length) {
+    const c = clipMove(dNorth, dEast, probe.walls, now, CONFIG.PLAYER_RADIUS, 600);
+    dNorth = c.n; dEast = c.e;
+  }
+
+  const d = metersToDegrees(state.lat, dNorth, dEast);
+  state.lat = Math.max(-89.9, Math.min(89.9, state.lat + d.dLat));
+  state.lon += d.dLon;
+  if (state.lon > 180) state.lon -= 360;
+  if (state.lon < -180) state.lon += 360;
+
+  // 地形データの高さ（地図の面がまだ読み込めていないときの代わりにも使う）
+  const carto = Cesium.Cartographic.fromDegrees(state.lon, state.lat);
+  let g;
+  if (MAP_MODE === "google") { requestGround(now); g = state.targetGround; }
+  else g = viewer.scene.globe.getHeight(carto);
+  if (typeof g === "number") state.groundH += (g - state.groundH) * Math.min(1, dt * 12);
+
+  let eyeH;
+  if (state.fly) {
+    const down = keys.has("KeyC") || keys.has("KeyQ") || touchDown;
+    const up = (keys.has("Space") || state.holdStart !== null ? 1 : 0) - (down ? 1 : 0);
+    const look = 0;
+    state.flyH = Math.max(state.groundH + (state.spectator ? 0.5 : 2), state.flyH + (up + look) * speed * dt);
+    eyeH = state.flyH;
+    state.feetH = state.flyH - CONFIG.EYE_HEIGHT;
+    state.vy = 0;
+  } else {
+    const holding = state.holdStart !== null && now - state.holdStart > CONFIG.HOLD_MS;
+    if (holding) {
+      // 長押し中は押している間ずっと上昇（離すと vy=0 から落ちる）
+      state.feetH += CONFIG.ASCEND_SPEED * dt;
+      state.vy = 0;
+      state.onGround = false;
+    } else {
+      // 立てる面は、当たり判定がONなら建物や屋根を含む地図の面、そうでなければ地形
+      const surface = (state.collide && !probe.error && typeof probe.ground === "number") ? probe.ground : state.groundH;
+      stepPhysics(state, surface, jumpQueued, dt, {
+        jump: CONFIG.JUMP_SPEED, gravity: CONFIG.GRAVITY, dropLimit: CONFIG.MAX_STEP, follow: CONFIG.GROUND_FOLLOW, maxFall: CONFIG.MAX_FALL_SPEED,
+      });
+    }
+    eyeH = state.feetH + CONFIG.EYE_HEIGHT;
+  }
+  jumpQueued = false;
+
+  // カメラ: 三人称なら、見ている向きの後ろ側に引く（壁があれば手前まで寄せる。地面より下には行かない）
+  let camLat = state.lat, camLon = state.lon, camH = eyeH;
+  if (state.third) {
+    const want = CONFIG.THIRD_DIST;
+    const avail = (state.collide && !state.fly && !probe.error && typeof probe.back === "number") ? Math.max(0.6, probe.back - 0.4) : want;
+    const target = Math.min(want, avail);
+    state.thirdDist = target < state.thirdDist ? target : state.thirdDist + (target - state.thirdDist) * Math.min(1, dt * 6);
+    const cp = Math.cos(state.pitch);
+    const o = metersToDegrees(state.lat, -Math.cos(state.heading) * cp * state.thirdDist, -Math.sin(state.heading) * cp * state.thirdDist);
+    camLat += o.dLat; camLon += o.dLon;
+    camH = Math.max(eyeH + 0.4 - Math.sin(state.pitch) * state.thirdDist, state.groundH + 0.4);
+  }
+  viewer.camera.setView({
+    destination: Cesium.Cartesian3.fromDegrees(camLon, camLat, camH),
+    orientation: { heading: state.heading, pitch: state.pitch, roll: 0 },
+  });
+  updateAvatar();
+
+  updateHud(now, eyeH);
+}
+
+// ============================================================
+// 起動
+// ============================================================
+async function main() {
+  if (!CONFIG.ION_TOKEN || CONFIG.ION_TOKEN.indexOf("ここに") === 0) {
+    setStatus("index.html の先頭にある CONFIG.ION_TOKEN に、Cesium ion のトークンを貼ってください。", true);
+    return;
+  }
+  Cesium.Ion.defaultAccessToken = CONFIG.ION_TOKEN;
+
+  setStatus("地形を読み込み中…");
+  terrainProvider = await Cesium.createWorldTerrainAsync();
+
+  viewer = new Cesium.Viewer("cesiumContainer", {
+    terrainProvider,
+    baseLayerPicker: false, geocoder: false, homeButton: false, sceneModePicker: false,
+    navigationHelpButton: false, animation: false, timeline: false, fullscreenButton: false,
+    infoBox: false, selectionIndicator: false,
+    baseLayer: MAP_MODE === "google" ? false : undefined,   // 写真の3D地図では地球の地面を隠すので、下地の地図画像は読み込まない（軽くする）
+  });
+  const scene = viewer.scene;
+  scene.screenSpaceCameraController.enableInputs = false;  // Cesium標準のカメラ操作は使わない
+  scene.globe.depthTestAgainstTerrain = true;
+  scene.globe.enableLighting = false;
+  viewer.camera.frustum.fov = Cesium.Math.toRadians(state.fov);
+  viewer.camera.frustum.far = state.drawDistance;   // 読み込み範囲: これより遠い地図は取得しない
+  // 空は青（写真の3D地図には空が含まれないので、背景色を空色にして、星空・大気は切る＝その分も軽い）
+  scene.backgroundColor = Cesium.Color.fromCssColorString("#8ec9f0");
+  if (scene.skyBox) scene.skyBox.show = false;
+  if (scene.skyAtmosphere) scene.skyAtmosphere.show = false;
+  if (scene.sun) scene.sun.show = false;
+  if (scene.moon) scene.moon.show = false;
+  scene.fog.enabled = false;
+  // 画質は高いまま、見た目に差が出にくい部分だけ軽くする
+  viewer.resolutionScale = 1;
+  scene.globe.maximumScreenSpaceError = 2;
+  scene.msaaSamples = 2;
+  viewer.clock.currentTime = Cesium.JulianDate.fromIso8601("2026-06-21T03:00:00Z"); // 日本時間の正午ごろ
+  viewer.clock.shouldAnimate = false;
+
+  setupPointerInput(viewer.canvas);
+
+  // 取得した地図は粗くしない: 遠くを粗くする仕組み(dynamicScreenSpaceError)は使わず、動いている間も要求を止めず、キャッシュも大きくとる
+  const tilesetOptions = {
+    maximumScreenSpaceError: state.sse,
+    dynamicScreenSpaceError: false,
+    cullRequestsWhileMoving: false,
+    skipLevelOfDetail: false,
+    cacheBytes: CONFIG.CACHE_BYTES,
+    maximumCacheOverflowBytes: CONFIG.CACHE_BYTES,
+  };
+  if (MAP_MODE === "google") {
+    setStatus("写真の3D地図を読み込み中…");
+    scene.globe.show = false;   // 3D地図に地面も含まれるので、地球の地面は隠す
+    tileset = await Cesium.Cesium3DTileset.fromIonAssetId(2275207, tilesetOptions);
+    scene.primitives.add(tileset);
+    state.tilesetLabel = "写真の3D地図(Google)";
+    state.colorMode = "off";
+    applyBuildingOffset();
+  } else {
+    setStatus("PLATEAUの建物データを探しています…");
+    const found = await resolveBuildingTilesetUrl();
+    setStatus("建物を読み込み中（" + found.label + "）…");
+    tileset = await Cesium.Cesium3DTileset.fromUrl(found.url, tilesetOptions);
+    scene.primitives.add(tileset);
+    state.tilesetLabel = found.label;
+    state.textured = found.textured;
+    if (found.textured) state.colorMode = "off";   // 写真テクスチャ付きならそのまま見せる
+    tileset.tileVisible.addEventListener(detectHeightProp);
+    applyBuildingOffset();
+    applyColorMode();
+  }
+
+  applyDrawDistance(state.drawDistance);
+  applyTileSse(state.sse);
+
+  await teleport(CONFIG.START.lat, CONFIG.START.lon, CONFIG.START.heading);
+  scene.preRender.addEventListener(frame);
+  scene.postRender.addEventListener(runProbes);
+
+  window.game = { state, teleport, viewer, tileset }; // あとでマルチプレイ処理をつなぐ入口
+  setStatus("まわりの地図を読み込み中…");
+  waitForTiles();
+}
+
+// 最初に見える範囲の地図が読み込めるまで、読み込み画面（制作: ヤモリ）を出しておく。25秒たったら先へ進む
+function waitForTiles() {
+  const t0 = performance.now();
+  const iv = setInterval(() => {
+    const el = performance.now() - t0;
+    const st = tileset && tileset.statistics;
+    const done = tileset && tileset.tilesLoaded && el > 1500;
+    if (!done && el < 25000) {
+      $("ldMsg").textContent = "まわりの地図を読み込み中…";
+      return;
+    }
+    clearInterval(iv);
+    setStatus("読み込み完了。歩き回れます");
+    hideLoading();
+  }, 300);
+}
+
+main().catch((err) => {
+  console.error(err);
+  const where = err && err.stack ? "\n" + String(err.stack).split("\n").slice(0, 4).join("\n") : "";
+  setStatus("エラー: " + (err && err.message ? err.message : err) + where, true);
+});
+</script>
+</body>
+</html>
